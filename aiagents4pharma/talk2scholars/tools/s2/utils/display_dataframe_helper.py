@@ -5,7 +5,7 @@ Utility for handling display dataframe operations.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class DisplayDataHelper:
     """Helper class to organize display dataframe operations."""
 
-    def __init__(self, artifact: Dict[str, Any], sort_by: Optional[str] = None, 
+    def __init__(self, artifact: Dict[str, Any], sort_by: Optional[str] = None,
                  ascending: bool = False, limit: Optional[int] = None):
         """
         Initialize the DisplayDataHelper with papers data and sorting preferences.
@@ -30,7 +30,8 @@ class DisplayDataHelper:
         self.sort_by = sort_by
         self.ascending = ascending
         self.limit = limit
-        logger.info(f"DisplayDataHelper initialized with {len(artifact)} papers, sort_by={sort_by}, ascending={ascending}, limit={limit}")
+        logger.info("DisplayDataHelper initialized with %s papers,sort_by=%s,ascending=%s,limit=%s",
+                    len(artifact), sort_by, ascending, limit)
 
     def sort_papers(self) -> Dict[str, Any]:
         """
@@ -43,59 +44,59 @@ class DisplayDataHelper:
         sort_by = self.sort_by
         ascending = self.ascending
         limit = self.limit
-        
+
         original_count = len(artifact)
-        logger.info(f"sort_papers starting with {original_count} papers")
-        
+        logger.info("sort_papers starting with %s papers", original_count)
+
         # Sort papers if sorting parameters are provided
         if sort_by:
-            logger.info(f"Sorting papers by {sort_by}, ascending={ascending}")
-            try:
+            logger.info("Sorting papers by %s, ascending=%s", sort_by, ascending)
+
                 # Convert papers dict to list for sorting
-                papers_list = list(artifact.values())
-                
-                # Check if the sort column exists in the papers
-                if papers_list and sort_by in papers_list[0]:
-                    # For numeric fields, convert to appropriate type before sorting
-                    if sort_by in ['Citation Count', 'H-Index', 'Year']:
-                        # Handle 'N/A' values by placing them at the end
-                        sorted_papers = sorted(
-                            papers_list,
-                            key=lambda x: float(x[sort_by]) if x[sort_by] != 'N/A' and str(x[sort_by]).replace('.', '', 1).isdigit() else float('-inf' if ascending else 'inf'),
-                            reverse=not ascending
-                        )
-                    else:
-                        # For string fields
-                        sorted_papers = sorted(
-                            papers_list,
-                            key=lambda x: x[sort_by] if x[sort_by] != 'N/A' else '',
-                            reverse=not ascending
-                        )
-                    
-                    # Limit the number of results if requested
-                    if limit is not None and limit > 0:
-                        logger.info(f"Limiting results to top {limit} papers")
-                        sorted_papers = sorted_papers[:limit]
-                        logger.info(f"After limiting: {len(sorted_papers)} papers")
-                    
-                    # Convert back to dictionary with paper IDs as keys
-                    artifact = {paper['semantic_scholar_paper_id']: paper for paper in sorted_papers}
-                    
-                    logger.info(f"Successfully sorted papers by {sort_by}, result has {len(artifact)} papers")
+            papers_list = list(artifact.values())
+
+            # Check if the sort column exists in the papers
+            if papers_list and sort_by in papers_list[0]:
+                # For numeric fields, convert to appropriate type before sorting
+                if sort_by in ['Citation Count', 'H-Index', 'Year']:
+                    # Handle 'N/A' values by placing them at the end
+                    sorted_papers = sorted(
+                        papers_list,
+                        key=lambda x: float(x[sort_by]) if x[sort_by] != 'N/A' and
+                                        str(x[sort_by]).replace('.', '', 1).isdigit() else
+                                        float('-inf' if ascending else 'inf'),
+                        reverse=not ascending
+                    )
                 else:
-                    logger.warning(f"Sort field '{sort_by}' not found in papers data")
-            except Exception as e:
-                logger.error(f"Error sorting papers: {e}")
-                # Continue with unsorted papers if sorting fails
-        
+                    # For string fields
+                    sorted_papers = sorted(
+                        papers_list,
+                        key=lambda x: x[sort_by] if x[sort_by] != 'N/A' else '',
+                        reverse=not ascending
+                    )
+
+                # Limit the number of results if requested
+                if limit is not None and limit > 0:
+                    logger.info("Limiting results to top %s papers", limit)
+                    sorted_papers = sorted_papers[:limit]
+                    logger.info("After limiting: %s papers", len(sorted_papers))
+
+                # Convert back to dictionary with paper IDs as keys
+                artifact ={paper['semantic_scholar_paper_id']: paper for paper in sorted_papers}
+
+                logger.info("Successfully sorted papers by %s, result has %s papers",
+                            sort_by, len(artifact))
+            else:
+                logger.warning("Sort field '%s' not found in papers data", sort_by)
+
         # Limit the number of results even without sorting
         elif limit is not None and limit > 0:
-            logger.info(f"Limiting results to top {limit} papers without sorting")
+            logger.info("Limiting results to top %s papers without sorting", limit)
             papers_list = list(artifact.values())
             limited_papers = papers_list[:limit]
             artifact = {paper['semantic_scholar_paper_id']: paper for paper in limited_papers}
-            logger.info(f"After limiting without sorting: {len(artifact)} papers")
-        
+            logger.info("After limiting without sorting: %s papers", len(artifact))
+
         return artifact
 
     def process_display(self) -> Dict[str, Any]:
@@ -106,17 +107,18 @@ class DisplayDataHelper:
             Dictionary containing processed papers and content message
         """
         sorted_artifact = self.sort_papers()
-        
+
         # Create content based on the SORTED artifact, not the original
         content = f"{len(sorted_artifact)} papers found. Papers are attached as an artifact."
         if self.sort_by:
             content += f" Papers sorted by {self.sort_by} in {'ascending' if self.ascending else 'descending'} order."
         if self.limit is not None and self.limit > 0:
             content += f" Showing top {self.limit} results."
-        
-        logger.info(f"process_display returning artifact with {len(sorted_artifact)} papers")
-        
+
+        logger.info("process_display returning artifact with %s papers", len(sorted_artifact))
+
         return {
             "artifact": sorted_artifact,
             "content": content
+
         }

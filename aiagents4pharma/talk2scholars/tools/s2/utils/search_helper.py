@@ -124,11 +124,12 @@ class SearchData:
                 ],
                 "H-Index": max(
                     [
-                        int(author.get('hIndex', 0)) 
+                        int(author.get('hIndex', 0))
                         for author in paper.get("authors", [])
-                        if author.get('hIndex', 'N/A') != 'N/A' and str(author.get('hIndex', '')).isdigit()
-                    ] or [0] 
-                ),
+                        if author.get('hIndex', 'N/A') != 'N/A' and
+                        str(author.get('hIndex', '')).isdigit()
+                        ] or [0]
+                    ),
                 "URL": paper.get("url", "N/A"),
                 "arxiv_id": paper.get("externalIds", {}).get("ArXiv", "N/A"),
             }

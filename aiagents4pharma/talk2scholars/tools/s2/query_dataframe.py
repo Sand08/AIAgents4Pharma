@@ -4,9 +4,10 @@
 Tool for querying the metadata table of the last displayed papers.
 
 This tool loads the most recently displayed papers into a pandas DataFrame and uses an
-LLM-driven pandas agent to answer metadata-level questions (e.g., filter by author, list titles, H-Index, citation count, year).
-It is intended for metadata exploration only, and does not perform content-based retrieval
-or summarization. For PDF-level question answering, use the 'question_and_answer_agent'.
+LLM-driven pandas agent to answer metadata-level questions (e.g., filter by author, 
+list titles, H-Index, citation count, year).It is intended for metadata exploration only, 
+and does not perform content-based retrievalor summarization. For PDF-level question 
+answering, use the 'question_and_answer_agent'.
 """
 
 import logging
@@ -16,7 +17,7 @@ from langchain_experimental.agents import create_pandas_dataframe_agent
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from pydantic import BaseModel, Field
-# Configure logging
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -26,13 +27,13 @@ class NoPapersFoundError(Exception):
 
 class QueryDataframeInput(BaseModel):
     """Input schema for the query dataframe tool."""
-    
-    state: Annotated[dict, InjectedState]
-   
-    question: str = Field(
-        description="The metadata query to ask over the papers table. Supports sorting and ranking operations on bibliographic metrics like Citation Count, H-Index, and Year."
-    )
 
+    question: str = Field(
+        description="The metadata query to ask over the papers table. "
+        "Supports sorting and ranking operations on bibliographic metrics like "
+        "Citation Count, H-Index, and Year."
+    )
+    state: Annotated[dict, InjectedState]
 
 @tool("query_dataframe", args_schema=QueryDataframeInput, parse_docstring=True)
 def query_dataframe(question: str, state: Annotated[dict, InjectedState]) -> str:
@@ -41,7 +42,7 @@ def query_dataframe(question: str, state: Annotated[dict, InjectedState]) -> str
 
     This function loads the last displayed papers into a pandas DataFrame and uses a
     pandas DataFrame agent to answer metadata-level questions (e.g., "Which papers have
-    'Transformer' in the title?", "List authors of paper X", "Show me the top 5 papers 
+    'Transformer' in the title?", "List authors of paper X", "Show me the top 5 papers
     by citation count", "Which papers have the highest H-Index?"). It does not perform PDF
     content analysis or summarization; for content-level question answering, use the
     'question_and_answer_agent'.

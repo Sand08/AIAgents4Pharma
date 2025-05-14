@@ -25,12 +25,12 @@ class NoPapersFoundError(Exception):
 
 class DisplayDataframeInput(BaseModel):
     """Input schema for the display dataframe tool."""
-    
+
     state: Annotated[dict, InjectedState]
     tool_call_id: Annotated[str, InjectedToolCallId]
     sort_by: Optional[str] = Field(
         default=None,
-        description="Column to sort by. Common options include 'Citation Count', 'H-Index', or 'Year'."
+description="Column to sort by. Common options include 'Citation Count', 'H-Index', or 'Year'."
     )
     ascending: bool = Field(
         default=False,
@@ -38,7 +38,7 @@ class DisplayDataframeInput(BaseModel):
     )
     limit: Optional[int] = Field(
         default=None,
-        description="Limit the number of results. For example, limit=5 will show only the top 5 papers."
+description="Limit the number of results. For example, limit=5 will show only the top 5 papers."
     )
 
 
@@ -52,46 +52,47 @@ def display_dataframe(
 ) -> Command:
     """
     Render the last set of retrieved papers as a DataFrame in the front-end.
-    
+
     This function reads the 'last_displayed_papers' key from state, fetches the
     corresponding metadata dictionary, and returns a Command with a ToolMessage
     containing the artifact (dictionary) for the front-end to render as a DataFrame.
-    
-    The results can be sorted by bibliographic metrics such as 'Citation Count', 'Year', 
+
+    The results can be sorted by bibliographic metrics such as 'Citation Count', 'Year',
     or 'H-Index' and limited to a specified number of results.
-    
+
     Args:
         tool_call_id (InjectedToolCallId): Unique ID of this tool invocation.
         state (dict): The agent's state containing the 'last_displayed_papers' reference.
         sort_by (str, optional): Column to sort by, such as 'Citation Count', 'H-Index', or 'Year'.
         ascending (bool, optional): Sort order - True for ascending, False for descending.
         limit (int, optional): Limit the number of results (e.g., limit=5 shows top 5 papers).
-    
+
     Returns:
         Command: A command whose update contains a ToolMessage with the artifact
                  (papers dict) for DataFrame rendering in the UI.
-    
+
     Raises:
         NoPapersFoundError: If no entries exist under 'last_displayed_papers' in state.
     """
-    logger.info(f"display_dataframe called with sort_by={sort_by}, ascending={ascending}, limit={limit}")
+    logger.info("display_dataframe called with sort_by=%s, ascending=%s, limit=%s",
+                sort_by, ascending, limit)
     context_key = state.get("last_displayed_papers")
-    logger.info(f"Retrieved context_key: {context_key}")
-    
+    logger.info("Retrieved context_key: %s", context_key)
+
     artifact = state.get(context_key)
     if not artifact:
         logger.info("No papers found in state, raising NoPapersFoundError")
         raise NoPapersFoundError(
             "No papers found. A search/rec needs to be performed first."
         )
-    
-    logger.info(f"Retrieved artifact with {len(artifact)} papers")
-    
+
+    logger.info("Retrieved artifact with %s papers", len(artifact))
+
     helper = DisplayDataHelper(artifact, sort_by, ascending, limit)
     result = helper.process_display()
-    
-    logger.info(f"Helper returned result with {len(result['artifact'])} papers")
-    
+
+    logger.info("Helper returned result with %s papers", len(result['artifact']))
+
     update_dict = {
         "messages": [
             ToolMessage(
@@ -100,9 +101,9 @@ def display_dataframe(
                 artifact=result["artifact"],
             )
         ],
-        context_key: result["artifact"],  # Update state with processed papers
+        context_key: result["artifact"],
     }
-    
-    logger.info(f"Returning Command with update for context_key: {context_key}")
-    
+
+    logger.info("Returning Command with update for context_key: %s", context_key)
+
     return Command(update=update_dict)
