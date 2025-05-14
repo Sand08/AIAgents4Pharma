@@ -74,8 +74,10 @@ def display_dataframe(
     Raises:
         NoPapersFoundError: If no entries exist under 'last_displayed_papers' in state.
     """
-    logger.info("Displaying papers")
+    logger.info(f"display_dataframe called with sort_by={sort_by}, ascending={ascending}, limit={limit}")
     context_key = state.get("last_displayed_papers")
+    logger.info(f"Retrieved context_key: {context_key}")
+    
     artifact = state.get(context_key)
     if not artifact:
         logger.info("No papers found in state, raising NoPapersFoundError")
@@ -83,18 +85,24 @@ def display_dataframe(
             "No papers found. A search/rec needs to be performed first."
         )
     
+    logger.info(f"Retrieved artifact with {len(artifact)} papers")
+    
     helper = DisplayDataHelper(artifact, sort_by, ascending, limit)
     result = helper.process_display()
     
-    return Command(
-        update={
-            "messages": [
-                ToolMessage(
-                    content=result["content"],
-                    tool_call_id=tool_call_id,
-                    artifact=result["artifact"],
-                )
-            ],
-            context_key: result["artifact"],
-        }
-    )
+    logger.info(f"Helper returned result with {len(result['artifact'])} papers")
+    
+    update_dict = {
+        "messages": [
+            ToolMessage(
+                content=result["content"],
+                tool_call_id=tool_call_id,
+                artifact=result["artifact"],
+            )
+        ],
+        context_key: result["artifact"],  # Update state with processed papers
+    }
+    
+    logger.info(f"Returning Command with update for context_key: {context_key}")
+    
+    return Command(update=update_dict)

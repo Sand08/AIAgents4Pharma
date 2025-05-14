@@ -30,7 +30,7 @@ class DisplayDataHelper:
         self.sort_by = sort_by
         self.ascending = ascending
         self.limit = limit
-        self.content = ""
+        logger.info(f"DisplayDataHelper initialized with {len(artifact)} papers, sort_by={sort_by}, ascending={ascending}, limit={limit}")
 
     def sort_papers(self) -> Dict[str, Any]:
         """
@@ -39,10 +39,13 @@ class DisplayDataHelper:
         Returns:
             Dictionary containing sorted paper data
         """
-        artifact = self.artifact
+        artifact = self.artifact.copy()  # Work with a copy to avoid modifying the original
         sort_by = self.sort_by
         ascending = self.ascending
         limit = self.limit
+        
+        original_count = len(artifact)
+        logger.info(f"sort_papers starting with {original_count} papers")
         
         # Sort papers if sorting parameters are provided
         if sort_by:
@@ -73,11 +76,12 @@ class DisplayDataHelper:
                     if limit is not None and limit > 0:
                         logger.info(f"Limiting results to top {limit} papers")
                         sorted_papers = sorted_papers[:limit]
+                        logger.info(f"After limiting: {len(sorted_papers)} papers")
                     
                     # Convert back to dictionary with paper IDs as keys
                     artifact = {paper['semantic_scholar_paper_id']: paper for paper in sorted_papers}
                     
-                    logger.info(f"Successfully sorted papers by {sort_by}")
+                    logger.info(f"Successfully sorted papers by {sort_by}, result has {len(artifact)} papers")
                 else:
                     logger.warning(f"Sort field '{sort_by}' not found in papers data")
             except Exception as e:
@@ -86,27 +90,13 @@ class DisplayDataHelper:
         
         # Limit the number of results even without sorting
         elif limit is not None and limit > 0:
-            logger.info(f"Limiting results to top {limit} papers")
+            logger.info(f"Limiting results to top {limit} papers without sorting")
             papers_list = list(artifact.values())
             limited_papers = papers_list[:limit]
             artifact = {paper['semantic_scholar_paper_id']: paper for paper in limited_papers}
+            logger.info(f"After limiting without sorting: {len(artifact)} papers")
         
         return artifact
-
-    def create_content(self) -> str:
-        """
-        Create the content message for the response.
-        
-        Returns:
-            String containing the content message
-        """
-        content = f"{len(self.artifact)} papers found. Papers are attached as an artifact."
-        if self.sort_by:
-            content += f" Papers sorted by {self.sort_by} in {'ascending' if self.ascending else 'descending'} order."
-        if self.limit is not None and self.limit > 0:
-            content += f" Showing top {self.limit} results."
-        
-        return content
 
     def process_display(self) -> Dict[str, Any]:
         """
@@ -116,7 +106,15 @@ class DisplayDataHelper:
             Dictionary containing processed papers and content message
         """
         sorted_artifact = self.sort_papers()
-        content = self.create_content()
+        
+        # Create content based on the SORTED artifact, not the original
+        content = f"{len(sorted_artifact)} papers found. Papers are attached as an artifact."
+        if self.sort_by:
+            content += f" Papers sorted by {self.sort_by} in {'ascending' if self.ascending else 'descending'} order."
+        if self.limit is not None and self.limit > 0:
+            content += f" Showing top {self.limit} results."
+        
+        logger.info(f"process_display returning artifact with {len(sorted_artifact)} papers")
         
         return {
             "artifact": sorted_artifact,
