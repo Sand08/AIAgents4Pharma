@@ -2,10 +2,7 @@
 """
 Tool for rendering the most recently displayed papers as a DataFrame artifact for the front-end.
 This module defines a tool that retrieves the paper metadata stored under the state key
-'last_displayed_papers' and returns it as an artifact (dictionary of papers). The front-end
-can then render this artifact as a pandas DataFrame for display. If no papers are found,
-a NoPapersFoundError is raised to indicate that a search or recommendation should be
-performed first.
+'last_displayed_papers' and returns it as an artifact (dictionary of papers).
 """
 import logging
 from typing import Annotated, Optional
@@ -15,7 +12,7 @@ from langchain_core.tools.base import InjectedToolCallId
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from pydantic import BaseModel, Field
-from typing import Annotated, Optional
+from .utils.display_dataframe_helper import DisplayDataHelper
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,12 +21,8 @@ logger = logging.getLogger(__name__)
 class NoPapersFoundError(Exception):
     """
     Exception raised when no research papers are found in the agent's state.
-    This exception helps the language model determine whether a new search
-    or recommendation should be initiated.
-    Example:
-        >>> if not papers:
-        >>>     raise NoPapersFoundError("No papers found. A search is needed.")
     """
+
 class DisplayDataframeInput(BaseModel):
     """Input schema for the display dataframe tool."""
     
@@ -63,17 +56,16 @@ def display_dataframe(
     This function reads the 'last_displayed_papers' key from state, fetches the
     corresponding metadata dictionary, and returns a Command with a ToolMessage
     containing the artifact (dictionary) for the front-end to render as a DataFrame.
-    If no papers are found in state, it raises a NoPapersFoundError to indicate
-    that a search or recommendation must be performed first.
     
     The results can be sorted by bibliographic metrics such as 'Citation Count', 'Year', 
-    or 'H-Index'.
+    or 'H-Index' and limited to a specified number of results.
     
     Args:
         tool_call_id (InjectedToolCallId): Unique ID of this tool invocation.
         state (dict): The agent's state containing the 'last_displayed_papers' reference.
         sort_by (str, optional): Column to sort by, such as 'Citation Count', 'H-Index', or 'Year'.
         ascending (bool, optional): Sort order - True for ascending, False for descending.
+        limit (int, optional): Limit the number of results (e.g., limit=5 shows top 5 papers).
     
     Returns:
         Command: A command whose update contains a ToolMessage with the artifact
@@ -91,68 +83,18 @@ def display_dataframe(
             "No papers found. A search/rec needs to be performed first."
         )
     
-    # Sort papers if sorting parameters are provided
-    if sort_by:
-        logger.info(f"Sorting papers by {sort_by}, ascending={ascending}")
-        try:
-            # Convert papers dict to list for sorting
-            papers_list = list(artifact.values())
-            
-            # Check if the sort column exists in the papers
-            if papers_list and sort_by in papers_list[0]:
-                # For numeric fields, convert to appropriate type before sorting
-                if sort_by in ['Citation Count', 'H-Index', 'Year']:
-                    # Handle 'N/A' values by placing them at the end
-                    sorted_papers = sorted(
-                        papers_list,
-                        key=lambda x: float(x[sort_by]) if x[sort_by] != 'N/A' and str(x[sort_by]).replace('.', '', 1).isdigit() else float('-inf' if ascending else 'inf'),
-                        reverse=not ascending
-                    )
-                else:
-                    # For string fields
-                    sorted_papers = sorted(
-                        papers_list,
-                        key=lambda x: x[sort_by] if x[sort_by] != 'N/A' else '',
-                        reverse=not ascending
-                    )
-                
-# Limit the number of results if requested
-                if limit is not None and limit > 0:
-                    logger.info(f"Limiting results to top {limit} papers")
-                    sorted_papers = sorted_papers[:limit]
-                
-                # Convert back to dictionary with paper IDs as keys
-                artifact = {paper['semantic_scholar_paper_id']: paper for paper in sorted_papers}
-                
-                logger.info(f"Successfully sorted papers by {sort_by}")
-            else:
-                logger.warning(f"Sort field '{sort_by}' not found in papers data")
-        except Exception as e:
-            logger.error(f"Error sorting papers: {e}")
-            # Continue with unsorted papers if sorting fails
-    
-    # Limit the number of results even without sorting
-    elif limit is not None and limit > 0:
-        logger.info(f"Limiting results to top {limit} papers")
-        papers_list = list(artifact.values())
-        limited_papers = papers_list[:limit]
-        artifact = {paper['semantic_scholar_paper_id']: paper for paper in limited_papers}
-    
-    content = f"{len(artifact)} papers found. Papers are attached as an artifact."
-    if sort_by:
-        content += f" Papers sorted by {sort_by} in {'ascending' if ascending else 'descending'} order."
-    if limit is not None and limit > 0:
-        content += f" Showing top {limit} results."
+    helper = DisplayDataHelper(artifact, sort_by, ascending, limit)
+    result = helper.process_display()
     
     return Command(
         update={
             "messages": [
                 ToolMessage(
-                    content=content,
+                    content=result["content"],
                     tool_call_id=tool_call_id,
-                    artifact=artifact,
+                    artifact=result["artifact"],
                 )
             ],
-            context_key: artifact,
+            context_key: result["artifact"],
         }
     )

@@ -44,7 +44,6 @@ class SearchData:
                 config_name="config", overrides=["tools/search=default"]
             )
             logger.info("Loaded configuration for search tool")
-            print(f"ChitwanBhand: {cfg.tools.search}")
             return cfg.tools.search
 
     def _create_params(self) -> Dict[str, Any]:
