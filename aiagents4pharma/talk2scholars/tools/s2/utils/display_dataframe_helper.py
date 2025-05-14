@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """
 Utility for handling display dataframe operations.
 """
@@ -40,7 +38,7 @@ class DisplayDataHelper:
         Returns:
             Dictionary containing sorted paper data
         """
-        artifact = self.artifact.copy()  # Work with a copy to avoid modifying the original
+        artifact = self.artifact.copy()
         sort_by = self.sort_by
         ascending = self.ascending
         limit = self.limit
@@ -48,25 +46,34 @@ class DisplayDataHelper:
         original_count = len(artifact)
         logger.info("sort_papers starting with %s papers", original_count)
 
-        # Sort papers if sorting parameters are provided
         if sort_by:
             logger.info("Sorting papers by %s, ascending=%s", sort_by, ascending)
 
-                # Convert papers dict to list for sorting
+            # Convert papers dict to list for sorting
             papers_list = list(artifact.values())
 
             # Check if the sort column exists in the papers
             if papers_list and sort_by in papers_list[0]:
                 # For numeric fields, convert to appropriate type before sorting
                 if sort_by in ['Citation Count', 'H-Index', 'Year']:
-                    # Handle 'N/A' values by placing them at the end
-                    sorted_papers = sorted(
-                        papers_list,
-                        key=lambda x: float(x[sort_by]) if x[sort_by] != 'N/A' and
-                                        str(x[sort_by]).replace('.', '', 1).isdigit() else
-                                        float('-inf' if ascending else 'inf'),
+                    # Filter out 'N/A' values and normal values into separate lists
+                    normal_papers = [p for p in papers_list if p[sort_by] != 'N/A']
+                    na_papers = [p for p in papers_list if p[sort_by] == 'N/A']
+
+                    # Sort normal papers
+                    sorted_normal = sorted(
+                        normal_papers,
+                        key=lambda x: float(x[sort_by]),
                         reverse=not ascending
                     )
+
+                    # Combine normal and N/A papers based on sort order
+                    # In descending order, N/A values should be at the end
+                    # In ascending order, N/A values can be at the beginning
+                    if ascending:
+                        sorted_papers = na_papers + sorted_normal
+                    else:
+                        sorted_papers = sorted_normal + na_papers
                 else:
                     # For string fields
                     sorted_papers = sorted(
@@ -82,7 +89,7 @@ class DisplayDataHelper:
                     logger.info("After limiting: %s papers", len(sorted_papers))
 
                 # Convert back to dictionary with paper IDs as keys
-                artifact ={paper['semantic_scholar_paper_id']: paper for paper in sorted_papers}
+                artifact = {paper['semantic_scholar_paper_id']: paper for paper in sorted_papers}
 
                 logger.info("Successfully sorted papers by %s, result has %s papers",
                             sort_by, len(artifact))
@@ -108,7 +115,6 @@ class DisplayDataHelper:
         """
         sorted_artifact = self.sort_papers()
 
-        # Create content based on the SORTED artifact, not the original
         content = f"{len(sorted_artifact)} papers found. Papers are attached as an artifact."
         if self.sort_by:
             content += f" Papers sorted by {self.sort_by} in {'ascending' if self.ascending else 'descending'} order."
@@ -120,5 +126,4 @@ class DisplayDataHelper:
         return {
             "artifact": sorted_artifact,
             "content": content
-
         }
