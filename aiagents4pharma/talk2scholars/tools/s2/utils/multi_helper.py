@@ -9,7 +9,7 @@ import logging
 from typing import Any, List, Optional, Dict
 import hydra
 import requests
-
+                   
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -138,9 +138,16 @@ class MultiPaperRecData:
                 "Journal Name": (paper.get("journal") or {}).get("name", "N/A"),
                 "Citation Count": paper.get("citationCount", "N/A"),
                 "Authors": [
-                    f"{author.get('name', 'N/A')} (ID: {author.get('authorId', 'N/A')})"
+                    f"{author.get('name', 'N/A')} (ID: {author.get('authorId', 'N/A')})" 
                     for author in paper.get("authors", [])
                 ],
+            "H-Index": max(
+                [
+                    int(author.get('hIndex', 0)) 
+                    for author in paper.get("authors", [])
+                    if author.get('hIndex', 'N/A') != 'N/A' and str(author.get('hIndex', '')).isdigit()
+                ] or [0]  # Default to [0] if the list is empty or no valid h-indices
+            ),
                 "URL": paper.get("url", "N/A"),
                 "arxiv_id": paper.get("externalIds", {}).get("ArXiv", "N/A"),
             }

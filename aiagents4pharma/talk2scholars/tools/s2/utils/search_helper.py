@@ -44,6 +44,7 @@ class SearchData:
                 config_name="config", overrides=["tools/search=default"]
             )
             logger.info("Loaded configuration for search tool")
+            print(f"ChitwanBhand: {cfg.tools.search}")
             return cfg.tools.search
 
     def _create_params(self) -> Dict[str, Any]:
@@ -87,7 +88,6 @@ class SearchData:
             )
 
         self.data = self.response.json()
-
         # Check for expected data format
         if "data" not in self.data:
             logger.error("Unexpected API response format: %s", self.data)
@@ -123,6 +123,13 @@ class SearchData:
                     f"{author.get('name', 'N/A')} (ID: {author.get('authorId', 'N/A')})"
                     for author in paper.get("authors", [])
                 ],
+                "H-Index": max(
+                    [
+                        int(author.get('hIndex', 0)) 
+                        for author in paper.get("authors", [])
+                        if author.get('hIndex', 'N/A') != 'N/A' and str(author.get('hIndex', '')).isdigit()
+                    ] or [0] 
+                ),
                 "URL": paper.get("url", "N/A"),
                 "arxiv_id": paper.get("externalIds", {}).get("ArXiv", "N/A"),
             }
