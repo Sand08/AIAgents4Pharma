@@ -3,6 +3,9 @@
 Tool for rendering the most recently displayed papers as a DataFrame artifact for the front-end.
 This module defines a tool that retrieves the paper metadata stored under the state key
 'last_displayed_papers' and returns it as an artifact (dictionary of papers).
+
+The tool can optionally sort papers by bibliographic metrics (Citation Count, H-Index, Year) 
+when explicitly requested, but will not sort by default.
 """
 import logging
 from typing import Annotated, Optional
@@ -30,15 +33,15 @@ class DisplayDataframeInput(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
     sort_by: Optional[str] = Field(
         default=None,
-description="Column to sort by. Common options include 'Citation Count', 'H-Index', or 'Year'."
+        description="Column to sort by when explicitly requested. Common metrics include 'Citation Count', 'H-Index', or 'Year'. Leave empty for no sorting."
     )
     ascending: bool = Field(
         default=False,
-        description="Sort order: True for ascending, False for descending (default)."
+        description="Sort order: True for ascending, False for descending. Only applies when sort_by is specified."
     )
     limit: Optional[int] = Field(
         default=None,
-description="Limit the number of results. For example, limit=5 will show only the top 5 papers."
+        description="Limit the number of results. For example, limit=5 will show only the top 5 papers."
     )
 
 
@@ -51,20 +54,25 @@ def display_dataframe(
     limit: Optional[int] = None,
 ) -> Command:
     """
-    Render the last set of retrieved papers as a DataFrame in the front-end.
+    Display the last set of retrieved papers in the front-end without any default sorting.
 
-    This function reads the 'last_displayed_papers' key from state, fetches the
-    corresponding metadata dictionary, and returns a Command with a ToolMessage
-    containing the artifact (dictionary) for the front-end to render as a DataFrame.
+    This function simply displays the papers in their original order unless explicitly asked to sort.
+    It reads the 'last_displayed_papers' key from state and returns a Command with a ToolMessage
+    containing the papers artifact for the front-end to render.
 
-    The results can be sorted by bibliographic metrics such as 'Citation Count', 'Year',
-    or 'H-Index' and limited to a specified number of results.
+    The papers can be optionally sorted by bibliographic metrics only when explicitly requested:
+    - Use 'Citation Count' to sort by number of citations
+    - Use 'H-Index' to sort by author H-Index values
+    - Use 'Year' to sort chronologically
+    
+    By default, no sorting is applied unless specifically requested.
 
     Args:
         tool_call_id (InjectedToolCallId): Unique ID of this tool invocation.
         state (dict): The agent's state containing the 'last_displayed_papers' reference.
-        sort_by (str, optional): Column to sort by, such as 'Citation Count', 'H-Index', or 'Year'.
-        ascending (bool, optional): Sort order - True for ascending, False for descending.
+        sort_by (str, optional): Column to sort by when explicitly requested, such as 'Citation Count', 'H-Index', or 'Year'.
+                                 No sorting is applied if this is None.
+        ascending (bool, optional): Sort order - True for ascending, False for descending. Only applies when sort_by is specified.
         limit (int, optional): Limit the number of results (e.g., limit=5 shows top 5 papers).
 
     Returns:
