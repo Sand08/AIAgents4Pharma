@@ -33,15 +33,24 @@ class DisplayDataframeInput(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
     sort_by: Optional[str] = Field(
         default=None,
-        description="Column to sort by when explicitly requested. Common metrics include 'Citation Count', 'H-Index', or 'Year'. Leave empty for no sorting."
+        description=(
+            "Column to sort by when explicitly requested. Common metrics include "
+            "'Citation Count', 'H-Index', or 'Year'. Leave empty for no sorting."
+        )
     )
     ascending: bool = Field(
         default=False,
-        description="Sort order: True for ascending, False for descending. Only applies when sort_by is specified."
+        description=(
+            "Sort order: True for ascending, False for descending. "
+            "Only applies when sort_by is specified."
+        )
     )
     limit: Optional[int] = Field(
         default=None,
-        description="Limit the number of results. For example, limit=5 will show only the top 5 papers."
+        description=(
+            "Limit the number of results. For example, "
+            "limit=5 will show only the top 5 papers."
+        )
     )
 
 
@@ -56,11 +65,12 @@ def display_dataframe(
     """
     Display the last set of retrieved papers in the front-end without any default sorting.
 
-    This function simply displays the papers in their original order unless explicitly asked to sort.
-    It reads the 'last_displayed_papers' key from state and returns a Command with a ToolMessage
-    containing the papers artifact for the front-end to render.
+    This function simply displays the papers in their original order unless explicitly 
+    asked to sort. It reads the 'last_displayed_papers' key from state and returns a 
+    Command with a ToolMessage containing the papers artifact for the front-end to render.
 
-    The papers can be optionally sorted by bibliographic metrics only when explicitly requested:
+    The papers can be optionally sorted by bibliographic metrics only when 
+    explicitly requested:
     - Use 'Citation Count' to sort by number of citations
     - Use 'H-Index' to sort by author H-Index values
     - Use 'Year' to sort chronologically
@@ -70,9 +80,10 @@ def display_dataframe(
     Args:
         tool_call_id (InjectedToolCallId): Unique ID of this tool invocation.
         state (dict): The agent's state containing the 'last_displayed_papers' reference.
-        sort_by (str, optional): Column to sort by when explicitly requested, such as 'Citation Count', 'H-Index', or 'Year'.
-                                 No sorting is applied if this is None.
-        ascending (bool, optional): Sort order - True for ascending, False for descending. Only applies when sort_by is specified.
+        sort_by (str, optional): Column to sort by when explicitly requested, such as
+            'Citation Count', 'H-Index', or 'Year'. No sorting is applied if this is None.
+        ascending (bool, optional): Sort order - True for ascending, False for descending. Only
+            applies when sort_by is specified. 
         limit (int, optional): Limit the number of results (e.g., limit=5 shows top 5 papers).
 
     Returns:
