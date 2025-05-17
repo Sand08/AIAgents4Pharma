@@ -691,7 +691,8 @@ def get_response(agent, graphs_visuals, app, st, prompt):
                 df_papers["Authors"] = df_papers["Authors"].apply(
                     lambda authors: (
                         ", ".join([author.split(" (ID:")[0] for author in authors])
-                        if isinstance(authors, list)
+                        if isinstance(authors, list) and authors
+                        else "N/A" if authors is None or pd.isna(authors)
                         else authors
                     )
                 )
