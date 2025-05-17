@@ -117,7 +117,8 @@ class DisplayDataHelper:
 
         content = f"{len(sorted_artifact)} papers found. Papers are attached as an artifact."
         if self.sort_by:
-            content += f" Papers sorted by {self.sort_by} in {'ascending' if self.ascending else 'descending'} order."
+            order_text = 'ascending' if self.ascending else 'descending'
+            content += f" Papers sorted by {self.sort_by} in {order_text} order."
         if self.limit is not None and self.limit > 0:
             content += f" Showing top {self.limit} results."
 

@@ -4,11 +4,23 @@ Tool for rendering the most recently displayed papers as a DataFrame artifact fo
 This module defines a tool that retrieves the paper metadata stored under the state key
 'last_displayed_papers' and returns it as an artifact (dictionary of papers).
 
-The tool can optionally sort papers by bibliographic metrics (Citation Count, H-Index, Year) 
-when explicitly requested, but will not sort by default.
+NOTE: This tool does NOT sort papers by default. It only sorts when the sort_by parameter
+is provided with a valid value ('Max H-Index', 'Citation Count', or 'Year').
+
+IMPORTANT: 
+1. Papers should ONLY be sorted when explicitly requested in queries containing:
+   - "sort by [metric]" (e.g., "sort by H-Index", "sort papers by citation count")
+   - "top X papers" (e.g., "show top 5 papers")
+   - "papers on [topic] by [metric]" (e.g., "papers on embedding by H-Index")
+   - "rank papers by [metric]" (e.g., "rank papers by year")
+
+2. DO NOT sort papers when there is no explicit request for sorting, such as:
+   - "search for papers on [topic]"
+   - "find papers about [topic]"
+   - "papers on [topic]" (without mentioning sorting)
 """
 import logging
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Literal
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 from langchain_core.tools.base import InjectedToolCallId
@@ -31,26 +43,22 @@ class DisplayDataframeInput(BaseModel):
 
     state: Annotated[dict, InjectedState]
     tool_call_id: Annotated[str, InjectedToolCallId]
-    sort_by: Optional[str] = Field(
+    sort_by: Optional[Literal["Max H-Index", "Citation Count", "Year"]] = Field(
         default=None,
-        description=(
-            "Column to sort by when explicitly requested. Common metrics include "
-            "'Citation Count', 'H-Index', or 'Year'. Leave empty for no sorting."
-        )
+        description="Field to sort papers by. Options: 'H-Index', 'Citation Count', 'Year'."
+                   "Set for queries like 'sort by H-Index', 'most cited papers', etc."
+                   "Default is None (no sorting)."
     )
     ascending: bool = Field(
         default=False,
-        description=(
-            "Sort order: True for ascending, False for descending. "
-            "Only applies when sort_by is specified."
-        )
+        description="Sort order: True for ascending (lowest first),"
+                   "False for descending (highest first). Default is False (highest values first)."
     )
     limit: Optional[int] = Field(
         default=None,
-        description=(
-            "Limit the number of results. For example, "
-            "limit=5 will show only the top 5 papers."
-        )
+        description="Limit the number of results."
+                   "For example, limit=4 will show only the top 4 papers."
+                   "Set this for queries like 'show top 4 papers', 'limit to 5 results', etc."
     )
 
 
@@ -58,33 +66,39 @@ class DisplayDataframeInput(BaseModel):
 def display_dataframe(
     tool_call_id: Annotated[str, InjectedToolCallId],
     state: Annotated[dict, InjectedState],
-    sort_by: Optional[str] = None,
+    sort_by: Optional[Literal["Max H-Index", "Citation Count", "Year"]] = None,
     ascending: bool = False,
     limit: Optional[int] = None,
 ) -> Command:
     """
-    Display the last set of retrieved papers in the front-end without any default sorting.
+    Render the last set of retrieved papers as a DataFrame in the front-end.
 
-    This function simply displays the papers in their original order unless explicitly 
-    asked to sort. It reads the 'last_displayed_papers' key from state and returns a 
-    Command with a ToolMessage containing the papers artifact for the front-end to render.
+    This function reads the 'last_displayed_papers' key from state, fetches the
+    corresponding metadata dictionary, and returns a Command with a ToolMessage
+    containing the artifact (dictionary) for the front-end to render as a DataFrame.
 
-    The papers can be optionally sorted by bibliographic metrics only when 
-    explicitly requested:
-    - Use 'Citation Count' to sort by number of citations
-    - Use 'H-Index' to sort by author H-Index values
-    - Use 'Year' to sort chronologically
+    IMPORTANT: This tool only sorts papers when explicitly asked to via the sort_by parameter.
+    By default, papers are displayed in their original order without sorting.
     
-    By default, no sorting is applied unless specifically requested.
+    TRIGGER PHRASES: Set sorting parameters for queries with phrases like:
+    - "sort by H-Index" or "papers by H-Index" → set sort_by="H-Index"
+    - "sort by citation" or "most cited" → set sort_by="Citation Count"
+    - "sort by year" or "newest papers" → set sort_by="Year"
+    - "top 4" or "limit to 5" → set limit=4 or limit=5
+
+    DO NOT sort papers for queries like:
+    - "search for papers on [topic]"
+    - "find papers about [topic]"
+    - "papers on [topic]" (without explicit sorting mentioned)
+    
+    DO NOT sort papers unless the query contains such explicit sorting requests.
 
     Args:
         tool_call_id (InjectedToolCallId): Unique ID of this tool invocation.
         state (dict): The agent's state containing the 'last_displayed_papers' reference.
-        sort_by (str, optional): Column to sort by when explicitly requested, such as
-            'Citation Count', 'H-Index', or 'Year'. No sorting is applied if this is None.
-        ascending (bool, optional): Sort order - True for ascending, False for descending. Only
-            applies when sort_by is specified. 
-        limit (int, optional): Limit the number of results (e.g., limit=5 shows top 5 papers).
+        sort_by (str, optional): Field to sort papers by. Options: 'H-Index', 'Citation Count', 'Year'.
+        ascending (bool): Sort order - True for ascending, False for descending.
+        limit (int, optional): Limit the number of results (e.g., limit=4 shows top 4 papers).
 
     Returns:
         Command: A command whose update contains a ToolMessage with the artifact

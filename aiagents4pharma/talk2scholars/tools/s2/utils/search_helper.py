@@ -122,7 +122,7 @@ class SearchData:
                     f"{author.get('name', 'N/A')} (ID: {author.get('authorId', 'N/A')})"
                     for author in paper.get("authors", [])
                 ],
-                "H-Index": max(
+                "Max H-Index": max(
                     [
                         int(author.get('hIndex', 0))
                         for author in paper.get("authors", [])
