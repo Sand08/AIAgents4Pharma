@@ -58,7 +58,6 @@ def search_tool(
     """
     # Create search data object to organize variables
     search_data = SearchData(query, limit, year, tool_call_id)
-
     # Process the search
     results = search_data.process_search()
 

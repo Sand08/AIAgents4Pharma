@@ -10,7 +10,6 @@ from typing import Any, List, Optional, Dict
 import hydra
 import requests
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -141,6 +140,15 @@ class MultiPaperRecData:
                     f"{author.get('name', 'N/A')} (ID: {author.get('authorId', 'N/A')})"
                     for author in paper.get("authors", [])
                 ],
+            "Max H-Index": max(
+                (
+                    int(author.get('hIndex', 0))
+                    for author in paper.get("authors", [])
+                    if author.get('hIndex', 'N/A') != 'N/A' and
+                    str(author.get('hIndex', '')).isdigit()
+                 ),
+                 default=0
+            ),
                 "URL": paper.get("url", "N/A"),
                 "arxiv_id": paper.get("externalIds", {}).get("ArXiv", "N/A"),
             }

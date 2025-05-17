@@ -27,6 +27,7 @@ import networkx as nx
 import gravis
 import pickle
 
+
 def submit_feedback(user_response):
     """
     Function to submit feedback to the developers.
@@ -674,6 +675,7 @@ def get_response(agent, graphs_visuals, app, st, prompt):
                         "key": "subgraph_" + uniq_msg_id,
                     }
                 )
+
         elif msg.name in ["display_dataframe"]:
             # This is a tool of T2S agent's sub-agent S2
             dic_papers = msg.artifact
@@ -684,6 +686,16 @@ def get_response(agent, graphs_visuals, app, st, prompt):
             df_papers["Key"] = df_papers.index
             # Drop index
             df_papers.reset_index(drop=True, inplace=True)
+
+            if "Authors" in df_papers.columns:
+                df_papers["Authors"] = df_papers["Authors"].apply(
+                    lambda authors: (
+                        ", ".join([author.split(" (ID:")[0] for author in authors])
+                        if isinstance(authors, list) and authors
+                        else "N/A" if authors is None or pd.isna(authors)
+                        else authors
+                    )
+                )
             # Drop colum abstract
             # Define the columns to drop
             columns_to_drop = [
@@ -1031,6 +1043,7 @@ def initialize_selections() -> None:
         selections[i] = []
 
     return selections
+
 
 @st.fragment
 def get_uploaded_files(cfg: hydra.core.config_store.ConfigStore) -> None:

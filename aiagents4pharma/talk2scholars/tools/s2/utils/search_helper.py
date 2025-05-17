@@ -87,7 +87,6 @@ class SearchData:
             )
 
         self.data = self.response.json()
-
         # Check for expected data format
         if "data" not in self.data:
             logger.error("Unexpected API response format: %s", self.data)
@@ -123,6 +122,15 @@ class SearchData:
                     f"{author.get('name', 'N/A')} (ID: {author.get('authorId', 'N/A')})"
                     for author in paper.get("authors", [])
                 ],
+                "Max H-Index": max(
+                    (
+                        int(author.get('hIndex', 0))
+                        for author in paper.get("authors", [])
+                        if author.get('hIndex', 'N/A') != 'N/A' and
+                        str(author.get('hIndex', '')).isdigit()
+                    ),
+                    default=0
+                ),
                 "URL": paper.get("url", "N/A"),
                 "arxiv_id": paper.get("externalIds", {}).get("ArXiv", "N/A"),
             }

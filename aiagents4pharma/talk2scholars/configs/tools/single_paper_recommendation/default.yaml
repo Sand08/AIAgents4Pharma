@@ -8,6 +8,7 @@ api_fields:
   - "year"
   - "authors.name"
   - "authors.authorId"
+  - "authors.hIndex"
   - "citationCount"
   - "url"
   - "externalIds"
