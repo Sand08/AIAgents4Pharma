@@ -730,16 +730,15 @@ def get_response(agent, graphs_visuals, app, st, prompt):
             df_papers["Key"] = df_papers.index
             # Drop index
             df_papers.reset_index(drop=True, inplace=True)
+            def fmt_authors(authors):
+                if isinstance(authors, list) and authors:
+                    # strip off " (ID: ...)" and join
+                    return ", ".join(a.split(" (ID:")[0] for a in authors)
+                if pd.isna(authors) or authors is None:
+                    return "N/A"
+                return str(authors)
 
-            if "Authors" in df_papers.columns:
-                df_papers["Authors"] = df_papers["Authors"].apply(
-                    lambda authors: (
-                        ", ".join([author.split(" (ID:")[0] for author in authors])
-                        if isinstance(authors, list) and authors
-                        else "N/A" if authors is None or pd.isna(authors)
-                        else authors
-                    )
-                )
+            df_papers["Authors"] = df_papers["Authors"].apply(fmt_authors)
             # Drop colum abstract
             # Define the columns to drop
             columns_to_drop = [
