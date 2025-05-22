@@ -123,6 +123,18 @@ class SearchData:
                     f"{author.get('name', 'N/A')} (ID: {author.get('authorId', 'N/A')})"
                     for author in paper.get("authors", [])
                 ],
+                "Max H-Index": (
+                max(
+                    [
+                        int(author["hIndex"])
+                        for author in paper.get("authors", [])
+                        if str(author.get("hIndex", "")).isdigit()
+                    ]
+                ) if any(
+                    str(author.get("hIndex", "")).isdigit()
+                    for author in paper.get("authors", [])
+                ) else "N/A"
+            ),
                 "URL": paper.get("url", "N/A"),
                 "arxiv_id": paper.get("externalIds", {}).get("ArXiv", "N/A"),
             }
