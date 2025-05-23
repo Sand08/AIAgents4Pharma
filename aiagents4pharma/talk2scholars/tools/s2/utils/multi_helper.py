@@ -141,18 +141,7 @@ class MultiPaperRecData:
                     f"{author.get('name', 'N/A')} (ID: {author.get('authorId', 'N/A')})"
                     for author in paper.get("authors", [])
                 ],
-                "Max H-Index": (
-                max(
-                    [
-                        int(author["hIndex"])
-                        for author in paper.get("authors", [])
-                        if str(author.get("hIndex", "")).isdigit()
-                    ]
-                ) if any(
-                    str(author.get("hIndex", "")).isdigit()
-                    for author in paper.get("authors", [])
-                ) else "N/A"
-            ),
+                "Max H-Index": self._get_max_h_index(paper.get("authors", [])),
                 "URL": paper.get("url", "N/A"),
                 "arxiv_id": paper.get("externalIds", {}).get("ArXiv", "N/A"),
             }
@@ -161,6 +150,16 @@ class MultiPaperRecData:
         }
 
         logger.info("Filtered %d papers", len(self.filtered_papers))
+
+    def _get_max_h_index(self, authors):
+        """Helper method to calculate maximum H-index from authors list."""
+        h_indices = []
+        for author in authors:
+            h_index = author.get("hIndex", "")
+            if str(h_index).isdigit():
+                h_indices.append(int(h_index))
+
+        return max(h_indices) if h_indices else "N/A"
 
     def _create_content(self) -> None:
         """Create the content message for the response."""

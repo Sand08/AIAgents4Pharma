@@ -69,7 +69,6 @@ def test_dummy_response_no_error():
     # Calling raise_for_status should not raise an exception and should return None.
     assert response.raise_for_status() is None
 
-
 def test_dummy_response_raise_error():
     """Test that raise_for_status raises an exception for a failing response."""
     # Create a DummyResponse with a failing status code.
@@ -77,7 +76,6 @@ def test_dummy_response_raise_error():
     # Calling raise_for_status should raise an HTTPError.
     with pytest.raises(requests.HTTPError):
         response.raise_for_status()
-
 
 def dummy_requests_post_success(url, headers, params, data, timeout):
     """dummy_requests_post_success"""
@@ -95,7 +93,11 @@ def dummy_requests_post_success(url, headers, params, data, timeout):
             {
                 "paperId": "paperA",
                 "title": "Multi Rec Paper A",
-                "authors": [{"name": "Author X", "authorId": "AX"}],
+                "authors": [
+                    {"name": "Author X", "authorId": "AX", "hIndex": "50"},
+                    {"name": "Author Y", "authorId": "AY", "hIndex": "45"},
+                    {"name": "Author Z", "authorId": "AZ"}  # No h-index
+                ],
                 "year": 2019,
                 "citationCount": 12,
                 "url": "http://paperA",
@@ -104,7 +106,10 @@ def dummy_requests_post_success(url, headers, params, data, timeout):
             {
                 "paperId": "paperB",
                 "title": "Multi Rec Paper B",
-                "authors": [{"name": "Author Y", "authorId": "AY"}],
+                "authors": [
+                    {"name": "Author W", "authorId": "AW", "hIndex": ""},  # Empty h-index
+                    {"name": "Author V", "authorId": "AV", "hIndex": "15"}
+                ],
                 "year": 2020,
                 "citationCount": 18,
                 "url": "http://paperB",
@@ -122,7 +127,6 @@ def dummy_requests_post_success(url, headers, params, data, timeout):
         ]
     }
     return DummyResponse(dummy_data)
-
 
 def dummy_requests_post_unexpected(url, headers, params, data, timeout):
     """dummy_requests_post_unexpected"""
@@ -221,6 +225,10 @@ def test_multi_paper_rec_success(monkeypatch):
     assert sent_payload["positivePaperIds"] == ["p1", "p2"]
     assert sent_payload["negativePaperIds"] == []
 
+    # Add these assertions after checking papers are included
+    # Check that Max H-Index was properly calculated
+    assert papers["paperA"]["Max H-Index"] == 50  # Max of 50, 45, and no h-index
+    assert papers["paperB"]["Max H-Index"] == 15  # Only one valid h-index (15)
 
 def test_multi_paper_rec_unexpected_format(monkeypatch):
     """
