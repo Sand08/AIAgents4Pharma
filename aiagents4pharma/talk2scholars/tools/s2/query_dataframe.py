@@ -133,16 +133,33 @@ def query_dataframe(question: str, state: Annotated[dict, InjectedState]) -> str
         )
     )
 
-    # Enhance question with sorting hints if applicable
+    # Enhance question with specific instructions
     enhanced_question = question
     sorting_keywords = ['top', 'highest', 'lowest', 'sort', 'rank', 'by h-index',
                         'by h index', 'by citation']
+
+    # Critical enhancement for "these papers" or when referring to displayed papers
+    if any(phrase in question.lower() for phrase in ['these papers', 'the papers', 'for them']):
+        enhanced_question = (
+            f"{question} IMPORTANT: The user is referring to ALL {len(df_papers)} papers "
+            "currently in the dataframe. Work with the entire dataframe without filtering. "
+            "If abstracts are requested, show them for ALL papers in the dataframe."
+        )
+
     if any(keyword in question.lower() for keyword in sorting_keywords):
         enhanced_question += (
             " IMPORTANT: Use the EXACT 'Max H-Index' or 'Citation Count' values from "
             "the dataframe. Do not make up any numbers. For sorting, use pandas methods "
             "like sort_values() or nlargest(). When listing results, show the actual "
             "H-Index values from the 'Max H-Index' column."
+        )
+
+    # Add instruction for handling text fields with special characters
+    if any(field in question.lower() for field in ['abstract', 'title', 'venue']):
+        enhanced_question += (
+            " When displaying text fields like Abstract, Title, or Venue, handle them "
+            "carefully to avoid syntax errors. Use print() or display() functions rather "
+            "than trying to construct complex string literals."
         )
 
     llm_result = df_agent.invoke(enhanced_question)

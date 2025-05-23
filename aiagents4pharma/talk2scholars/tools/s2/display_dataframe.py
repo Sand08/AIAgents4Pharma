@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 """
 Tool for rendering the most recently displayed papers as a DataFrame artifact for the front-end.
 
@@ -11,7 +10,6 @@ a NoPapersFoundError is raised to indicate that a search or recommendation shoul
 performed first.
 """
 
-
 import logging
 from typing import Annotated, Optional
 from langchain_core.messages import ToolMessage
@@ -21,7 +19,6 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 from .utils.display_helper import DisplayHelper
-
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -123,9 +120,6 @@ def display_dataframe(
         artifact = helper.get_sorted_dict()
         # Create appropriate content message with sorting info
         content = helper.format_summary(sort_by=sort_by, limit=limit)
-
-        # IMPORTANT: Update the state with the filtered/sorted papers so query_dataframe sees
-        state["last_displayed_papers"] = artifact
     else:
         # No sorting requested - return original papers
         logger.info("No sorting requested, displaying papers in original order")
@@ -142,7 +136,7 @@ def display_dataframe(
                     artifact=artifact,
                 )
             ],
-            # Update the last_displayed_papers to reflect what's actually being shown
+            # CRITICAL: Update the state to persist the filtered/sorted view
             "last_displayed_papers": artifact,
         }
     )

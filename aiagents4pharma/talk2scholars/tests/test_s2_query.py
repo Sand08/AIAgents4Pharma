@@ -327,3 +327,127 @@ class TestQueryDataframe:
         # Verify number_of_head_rows is capped at 10
         call_kwargs = mock_create_agent.call_args[1]
         assert call_kwargs["number_of_head_rows"] == 10
+
+    @patch("aiagents4pharma.talk2scholars.tools.s2.query_dataframe."
+        "create_pandas_dataframe_agent")
+    def test_query_dataframe_these_papers_enhancement(self, mock_create_agent, initial_state,
+                                                    mock_llm_model):
+        """Tests enhancement for 'these papers' type queries"""
+        state = initial_state.copy()
+        state["last_displayed_papers"] = MOCK_STATE_PAPERS
+        state["llm_model"] = mock_llm_model
+
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"output": "All 4 papers processed"}
+        mock_create_agent.return_value = mock_agent
+
+        # Test various phrases that should trigger the enhancement
+        test_phrases = [
+            "Get abstracts for these papers",
+            "Show me the papers",
+            "List details for them",
+            "Give me URLs for these papers"
+        ]
+
+        for question in test_phrases:
+            mock_agent.invoke.reset_mock()
+
+            query_dataframe.invoke(
+                {"question": question, "state": state}
+            )
+
+            # Verify the enhanced question includes the special instruction
+            call_args = mock_agent.invoke.call_args[0][0]
+            assert "IMPORTANT: The user is referring to ALL 4 papers" in call_args
+            assert "Work with the entire dataframe without filtering" in call_args
+
+    @patch("aiagents4pharma.talk2scholars.tools.s2.query_dataframe."
+        "create_pandas_dataframe_agent")
+    def test_query_dataframe_text_fields_enhancement(self, mock_create_agent, initial_state,
+                                                    mock_llm_model):
+        """Tests enhancement for queries involving text fields"""
+        state = initial_state.copy()
+        state["last_displayed_papers"] = MOCK_STATE_PAPERS
+        state["llm_model"] = mock_llm_model
+
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"output": "Text fields handled"}
+        mock_create_agent.return_value = mock_agent
+
+        # Test various text field queries
+        text_field_questions = [
+            "Show me the abstracts",
+            "List all titles",
+            "What venues are these from?"
+        ]
+
+        for question in text_field_questions:
+            mock_agent.invoke.reset_mock()
+
+            query_dataframe.invoke(
+                {"question": question, "state": state}
+            )
+
+            # Verify text field handling enhancement
+            call_args = mock_agent.invoke.call_args[0][0]
+            assert "When displaying text fields like Abstract" in call_args
+            assert "handle them carefully to avoid syntax errors" in call_args
+
+    @patch("aiagents4pharma.talk2scholars.tools.s2.query_dataframe."
+        "create_pandas_dataframe_agent")
+    def test_query_dataframe_combined_enhancements(self, mock_create_agent, initial_state,
+                                                mock_llm_model):
+        """Tests multiple enhancements applied together"""
+        state = initial_state.copy()
+        state["last_displayed_papers"] = MOCK_STATE_PAPERS
+        state["llm_model"] = mock_llm_model
+
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"output": "Combined enhancements"}
+        mock_create_agent.return_value = mock_agent
+
+        # Query that should trigger multiple enhancements
+        query_dataframe.invoke({
+            "question": "Show abstracts for these papers sorted by h-index",
+            "state": state
+        })
+
+        call_args = mock_agent.invoke.call_args[0][0]
+
+        # Should have "these papers" enhancement
+        assert "IMPORTANT: The user is referring to ALL 4 papers" in call_args
+
+        # Should have sorting enhancement
+        assert "IMPORTANT: Use the EXACT 'Max H-Index'" in call_args
+
+        # Should have text field enhancement
+        assert "When displaying text fields like Abstract" in call_args
+
+    @patch("aiagents4pharma.talk2scholars.tools.s2.query_dataframe."
+        "create_pandas_dataframe_agent")
+    def test_query_dataframe_no_enhancements(self, mock_create_agent, initial_state,
+                                            mock_llm_model):
+        """Tests that simple queries don't get unnecessary enhancements"""
+        state = initial_state.copy()
+        state["last_displayed_papers"] = MOCK_STATE_PAPERS
+        state["llm_model"] = mock_llm_model
+
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"output": "Simple query"}
+        mock_create_agent.return_value = mock_agent
+
+        # Simple query that shouldn't trigger any enhancements
+        query_dataframe.invoke({
+            "question": "How many papers are there?",
+            "state": state
+        })
+
+        call_args = mock_agent.invoke.call_args[0][0]
+
+        # Should just be the original question
+        assert call_args == "How many papers are there?"
+
+        # Should not contain any enhancement text
+        assert "IMPORTANT: The user is referring to" not in call_args
+        assert "IMPORTANT: Use the EXACT" not in call_args
+        assert "When displaying text fields" not in call_args
