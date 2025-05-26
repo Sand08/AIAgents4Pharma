@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Utility for display_dataframe tool - handles sorting and formatting of papers.
+Utility for query_dataframe tool - handles sorting and preparation of papers.
 """
 
 import logging
@@ -13,12 +13,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class DisplayHelper:
-    """Helper class for display dataframe operations."""
+class QueryHelper:
+    """Helper class for query dataframe operations."""
 
     def __init__(self, papers_dict: Dict[str, Dict[str, Any]]):
         """
-        Initialize DisplayHelper with papers dictionary.
+        Initialize QueryHelper with papers dictionary.
         
         Args:
             papers_dict: Dictionary of papers with paper_id as key
@@ -35,6 +35,12 @@ class DisplayHelper:
         """
         Convert papers dictionary to DataFrame and apply sorting if requested.
         
+        This method prepares the DataFrame for querying, handling:
+        - Conversion from dictionary to DataFrame
+        - Numeric conversion for bibliographic metrics
+        - Sorting by specified column
+        - Limiting results to top N papers
+        
         Args:
             sort_by: Column name to sort by ('Max H-Index', 'Citation Count',
                      'Year', 'Title', 'Authors')
@@ -42,15 +48,19 @@ class DisplayHelper:
             limit: Number of top results to return after sorting
             
         Returns:
-            pd.DataFrame: Formatted and optionally sorted DataFrame
+            pd.DataFrame: Formatted and optionally sorted DataFrame ready
+                         for querying
         """
         # Convert to DataFrame
         self.df = pd.DataFrame.from_dict(self.papers_dict, orient='index')
 
+        # Ensure index has a name for better querying
+        self.df.index.name = 'paper_id'
+
         # Handle sorting if requested
         if sort_by and sort_by in self.df.columns:
             logger.info(
-                "Sorting by %s (%s)",
+                "Preparing dataframe: sorting by %s (%s)",
                 sort_by,
                 'ascending' if ascending else 'descending'
             )
@@ -60,14 +70,25 @@ class DisplayHelper:
                 # Handle various representations of N/A values
                 na_values = ['N/A', 'n/a', 'NA', 'None', '', None]
 
+                # Create a copy to avoid modifying original data
+                self.df = self.df.copy()
+
                 # Replace N/A values with None for proper sorting
                 self.df[sort_by] = self.df[sort_by].replace(na_values, None)
 
-                # Convert to numeric
+                # Convert to numeric, handling errors gracefully
                 self.df[sort_by] = pd.to_numeric(
                     self.df[sort_by],
                     errors='coerce'
                 )
+
+                # Log conversion results for debugging
+                na_count = self.df[sort_by].isna().sum()
+                if na_count > 0:
+                    logger.info(
+                        "Found %d N/A values in %s column",
+                        na_count, sort_by
+                    )
 
             # Sort the dataframe
             self.df = self.df.sort_values(
@@ -78,68 +99,28 @@ class DisplayHelper:
 
             # Apply limit if specified
             if limit and limit > 0:
+                original_count = len(self.df)
                 self.df = self.df.head(limit)
-                logger.info("Limited results to top %d papers", limit)
+                logger.info(
+                    "Limited results from %d to top %d papers",
+                    original_count, limit
+                )
+
+        # Reset index to make paper_id accessible as a column
+        self.df = self.df.reset_index()
 
         return self.df
 
-    def get_sorted_dict(self) -> Dict[str, Dict[str, Any]]:
+    def get_column_info(self) -> Dict[str, str]:
         """
-        Get the sorted papers as a dictionary maintaining the sorted order.
+        Get information about available columns and their data types.
         
         Returns:
-            Dict: Sorted papers dictionary
+            Dict: Column names mapped to their data types
         """
         if self.df is None:
-            return self.papers_dict
+            self.df = pd.DataFrame.from_dict(self.papers_dict, orient='index')
 
-        # Convert back to dictionary maintaining order
-        sorted_dict = {}
-        for idx in self.df.index:
-            sorted_dict[idx] = self.papers_dict[idx]
-
-        return sorted_dict
-
-    def format_summary(
-        self,
-        sort_by: Optional[str] = None,
-        limit: Optional[int] = None
-    ) -> str:
-        """
-        Create a formatted summary of the papers.
-        
-        Args:
-            sort_by: Column that was used for sorting
-            limit: Number of papers displayed
-            
-        Returns:
-            str: Formatted summary message
-        """
-        total_papers = len(self.papers_dict)
-        displayed_papers = (
-            len(self.df) if self.df is not None else total_papers
-        )
-
-        summary = f"{displayed_papers} papers found."
-
-        if sort_by:
-            order = "ascending" if self.df is not None else "descending"
-            # Check the actual sort order from the dataframe
-            if self.df is not None and len(self.df) > 1:
-                if sort_by in ['Max H-Index', 'Citation Count', 'Year']:
-                    # For numeric columns, check if values are increasing
-                    vals = self.df[sort_by].dropna()
-                    if len(vals) > 1:
-                        order = (
-                            "ascending" if vals.iloc[0] < vals.iloc[-1]
-                            else "descending"
-                        )
-
-            summary += f" Sorted by {sort_by} ({order})."
-
-            if limit and limit < total_papers:
-                summary += f" Showing top {limit} results."
-
-        summary += " Papers are attached as an artifact."
-
-        return summary
+        return {
+            col: str(dtype) for col, dtype in self.df.dtypes.items()
+        }

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 """
-Tool for rendering the most recently displayed papers as a DataFrame artifact for the front-end.
+Tool for rendering the most recently displayed papers as a DataFrame artifact.
 
-This module defines a tool that retrieves the paper metadata stored under the state key
-'last_displayed_papers' and returns it as an artifact (dictionary of papers). The front-end
-can then render this artifact as a pandas DataFrame for display. If no papers are found,
-a NoPapersFoundError is raised to indicate that a search or recommendation should be
-performed first.
+This module defines a tool that retrieves the paper metadata stored under the
+state key 'last_displayed_papers' and returns it as an artifact (dictionary of
+papers). The front-end can then render this artifact as a pandas DataFrame for
+display. If no papers are found, a NoPapersFoundError is raised to indicate
+that a search or recommendation should be performed first.
 """
 
 import logging
@@ -43,19 +43,27 @@ class DisplayDataframeInput(BaseModel):
 
     sort_by: Optional[str] = Field(
         default=None,
-        description="Column to sort by. Options: 'Max H-Index', 'Citation Count', 'Year', etc. "
-        "If not specified, papers are displayed in original order."
+        description=(
+            "Column to sort by. Options: 'Max H-Index', 'Citation Count', "
+            "'Year', 'Title', 'Authors'. If not specified, papers are "
+            "displayed in original order."
+        )
     )
     ascending: bool = Field(
         default=False,
-        description="Sort order. False for descending (highest first), True for ascending."
+        description=(
+            "Sort order. False for descending (highest first), "
+            "True for ascending."
+        )
     )
     limit: Optional[int] = Field(
         default=None,
-        description=("Number of top results to display after sorting. "
-                     "If not specified, all papers are shown."),
+        description=(
+            "Number of top results to display after sorting. "
+            "If not specified, all papers are shown."
+        ),
         ge=1,
-        le=100
+        le=10
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
     state: Annotated[dict, InjectedState]
@@ -74,27 +82,30 @@ def display_dataframe(
     
     This function reads the 'last_displayed_papers' key from state, fetches the
     corresponding metadata dictionary, and returns a Command with a ToolMessage
-    containing the artifact (dictionary) for the front-end to render as a DataFrame.
-    If no papers are found in state, it raises a NoPapersFoundError to indicate
-    that a search or recommendation must be performed first.
+    containing the artifact (dictionary) for the front-end to render as a
+    DataFrame. If no papers are found in state, it raises a NoPapersFoundError
+    to indicate that a search or recommendation must be performed first.
     
     Optionally sorts the papers by bibliographic metrics before display.
 
     Args:
         tool_call_id (InjectedToolCallId): Unique ID of this tool invocation.
-        state (dict): The agent's state containing the 'last_displayed_papers' reference.
-        sort_by (str, optional): Column to sort by ('Max H-Index', 'Citation Count', 'Year', etc.)
-        ascending (bool): Sort order - False for descending (default), True for ascending
+        state (dict): The agent's state containing 'last_displayed_papers'.
+        sort_by (str, optional): Column to sort by ('Max H-Index',
+            'Citation Count', 'Year', etc.)
+        ascending (bool): Sort order - False for descending (default),
+            True for ascending
         limit (int, optional): Number of top results to display after sorting
 
     Returns:
-        Command: A command whose update contains a ToolMessage with the artifact
-                 (papers dict) for DataFrame rendering in the UI.
+        Command: A command whose update contains a ToolMessage with the
+                 artifact (papers dict) for DataFrame rendering in the UI.
 
     Raises:
-        NoPapersFoundError: If no entries exist under 'last_displayed_papers' in state.
+        NoPapersFoundError: If no entries exist under 'last_displayed_papers'
+            in state.
     """
-    logger.info("Displaying papers")
+    logger.info("Displaying papers with sort_by=%s, limit=%s", sort_by, limit)
 
     # Get papers from state
     context_val = state.get("last_displayed_papers")
@@ -116,7 +127,11 @@ def display_dataframe(
     # Only apply sorting if sort_by is explicitly specified
     if sort_by:
         logger.info("Applying sorting by %s", sort_by)
-        helper.prepare_dataframe(sort_by=sort_by, ascending=ascending, limit=limit)
+        helper.prepare_dataframe(
+            sort_by=sort_by,
+            ascending=ascending,
+            limit=limit
+        )
         artifact = helper.get_sorted_dict()
         # Create appropriate content message with sorting info
         content = helper.format_summary(sort_by=sort_by, limit=limit)
@@ -125,7 +140,10 @@ def display_dataframe(
         logger.info("No sorting requested, displaying papers in original order")
         artifact = papers_dict
         # Simple message without sorting info
-        content = f"{len(papers_dict)} papers found. Papers are attached as an artifact."
+        content = (
+            f"{len(papers_dict)} papers found. "
+            "Papers are attached as an artifact."
+        )
 
     return Command(
         update={

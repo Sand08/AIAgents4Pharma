@@ -3,19 +3,20 @@
 """
 Tool for querying the metadata table of the last displayed papers.
 
-This tool loads the most recently displayed papers into a pandas DataFrame and uses an
-LLM-driven pandas agent to answer metadata-level questions (e.g., filter by author, list titles).
-It is intended for metadata exploration only, and does not perform content-based retrieval
-or summarization. For PDF-level question answering, use the 'question_and_answer_agent'.
+This tool loads the most recently displayed papers into a pandas DataFrame and
+uses an LLM-driven pandas agent to answer metadata-level questions (e.g.,
+filter by author, list titles). It is intended for metadata exploration only,
+and does not perform content-based retrieval or summarization. For PDF-level
+question answering, use the 'question_and_answer_agent'.
 """
 
 import logging
-from typing import Annotated
-import pandas as pd
+from typing import Annotated, Optional
 from langchain_experimental.agents import create_pandas_dataframe_agent
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from pydantic import BaseModel, Field
+from .utils.query_helper import QueryHelper
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,33 +31,63 @@ class QueryDataframeInput(BaseModel):
     """Input schema for the query dataframe tool."""
 
     question: str = Field(
-        description="The metadata query to ask over the papers table. "
-        "Can include sorting requests like 'Show top 5 papers by H-index' or "
-        "'List papers sorted by citation count'."
+        description="The metadata query to ask over the papers table."
+    )
+    sort_by: Optional[str] = Field(
+        default=None,
+        description=(
+            "Column to sort by before querying. Options: 'Max H-Index', "
+            "'Citation Count', 'Year', 'Title', 'Authors'. "
+            "If not specified, original order is maintained."
+        )
+    )
+    ascending: bool = Field(
+        default=False,
+        description=(
+            "Sort order when sort_by is specified. "
+            "False for descending (highest first), True for ascending."
+        )
+    )
+    limit: Optional[int] = Field(
+        default=None,
+        description=(
+            "Number of top results to consider after sorting. "
+            "If not specified, all papers are considered."
+        ),
+        ge=1,
+        le=10
     )
     state: Annotated[dict, InjectedState]
 
 
 @tool("query_dataframe", args_schema=QueryDataframeInput, parse_docstring=True)
-def query_dataframe(question: str, state: Annotated[dict, InjectedState]) -> str:
+def query_dataframe(
+    question: str,
+    state: Annotated[dict, InjectedState],
+    sort_by: Optional[str] = None,
+    ascending: bool = False,
+    limit: Optional[int] = None,
+) -> str:
     """
     Perform a tabular query on the most recently displayed papers.
 
-    This function loads the last displayed papers into a pandas DataFrame and uses a
-    pandas DataFrame agent to answer metadata-level questions (e.g., "Which papers have
-    'Transformer' in the title?", "List authors of paper X", "Show top 5 papers by H-index").
-    It does not perform PDF content analysis or summarization; for content-level question
-    answering, use the 'question_and_answer_agent'.
-    
-    The agent can handle sorting requests using pandas operations like:
-    - "Show me the top 5 papers by H-index"
-    - "List all papers sorted by citation count in descending order"
-    - "Which paper has the highest H-index?"
+    This function loads the last displayed papers into a pandas DataFrame and
+    uses a pandas DataFrame agent to answer metadata-level questions (e.g.,
+    "Which papers have 'Transformer' in the title?", "List authors of paper X").
+    It does not perform PDF content analysis or summarization; for content-level
+    question answering, use the 'question_and_answer_agent'.
+
+    The tool can optionally sort the papers by bibliographic metrics before
+    performing the query, which is useful for questions like "What are the
+    abstracts of the top 5 papers by citation count?"
 
     Args:
         question (str): The metadata query to ask over the papers table.
         state (dict): The agent's state containing 'last_displayed_papers'
             key referencing the metadata table in state.
+        sort_by (str, optional): Column to sort by before querying
+        ascending (bool): Sort order - False for descending (default)
+        limit (int, optional): Number of top results to consider after sorting
 
     Returns:
         str: The LLM's response to the metadata query.
@@ -64,7 +95,11 @@ def query_dataframe(question: str, state: Annotated[dict, InjectedState]) -> str
     Raises:
         NoPapersFoundError: If no papers have been displayed yet.
     """
-    logger.info("Querying last displayed papers with question: %s", question)
+    logger.info(
+        "Querying papers with question: %s, sort_by: %s, limit: %s",
+        question, sort_by, limit
+    )
+
     llm_model = state.get("llm_model")
     context_val = state.get("last_displayed_papers")
 
@@ -80,33 +115,22 @@ def query_dataframe(question: str, state: Annotated[dict, InjectedState]) -> str
     else:
         dic_papers = state.get(context_val)
 
-    # Convert to DataFrame
-    df_papers = pd.DataFrame.from_dict(dic_papers, orient="index")
-
-    # Pre-process numeric columns for better sorting capability
-    # Convert 'Max H-Index' and 'Citation Count' to numeric, handling 'N/A' values
-    if 'Max H-Index' in df_papers.columns:
-        df_papers['Max H-Index'] = pd.to_numeric(
-            df_papers['Max H-Index'].replace('N/A', None),
-            errors='coerce'
-        )
-
-    if 'Citation Count' in df_papers.columns:
-        df_papers['Citation Count'] = pd.to_numeric(
-            df_papers['Citation Count'].replace('N/A', None),
-            errors='coerce'
-        )
-
-    if 'Year' in df_papers.columns:
-        df_papers['Year'] = pd.to_numeric(
-            df_papers['Year'].replace('N/A', None),
-            errors='coerce'
-        )
+    # Use helper to prepare DataFrame with sorting if needed
+    helper = QueryHelper(dic_papers)
+    df_papers = helper.prepare_dataframe(
+        sort_by=sort_by,
+        ascending=ascending,
+        limit=limit
+    )
 
     # Log the actual papers being queried
-    logger.info("Querying over %d papers that are currently displayed", len(df_papers))
+    logger.info(
+        "Querying over %d papers%s",
+        len(df_papers),
+        f" (sorted by {sort_by})" if sort_by else ""
+    )
 
-    # Create pandas agent with enhanced prompt for sorting
+    # Create agent with prepared DataFrame
     df_agent = create_pandas_dataframe_agent(
         llm_model,
         allow_dangerous_code=True,
@@ -114,53 +138,19 @@ def query_dataframe(question: str, state: Annotated[dict, InjectedState]) -> str
         df=df_papers,
         max_iterations=5,
         include_df_in_prompt=True,
-        number_of_head_rows=min(df_papers.shape[0], 10),  # Show up to 10 rows
+        number_of_head_rows=min(df_papers.shape[0], 20),  # Limit for performance
         verbose=True,
         prefix=(
-            f"You are working with a pandas dataframe containing {len(df_papers)} "
-            "academic papers metadata. The dataframe has the following columns: "
-            + ", ".join(df_papers.columns.tolist()) + ". "
-            "IMPORTANT: This dataframe contains ONLY the papers that are currently "
-            "displayed to the user. If the user asks about 'these papers' or 'the papers', "
-            "they mean ALL papers in this dataframe. Always use the ACTUAL values from "
-            "the dataframe. Never make up or hallucinate values. For numeric columns like "
-            "'Max H-Index' and 'Citation Count', use the exact values shown in the "
-            "dataframe. Numeric columns may contain NaN values which should be handled "
-            "appropriately. Use pandas methods like sort_values(), nlargest(), nsmallest() "
-            "for sorting tasks. When sorting, use na_position='last' to put NaN values at "
-            "the end. When reporting results, ALWAYS use the actual values from the "
-            "dataframe, not made-up numbers."
+            "You are working with a pandas dataframe containing research "
+            "papers metadata. The dataframe is already loaded as 'df'. "
+            f"It contains {len(df_papers)} papers"
+            f"{f' sorted by {sort_by}' if sort_by else ''}. "
+            "Column names include: Title, Authors, Year, Citation Count, "
+            "Max H-Index, Abstract, URL, etc. "
+            "Always refer to the dataframe that's already loaded, "
+            "don't try to search for new papers.\n\n"
         )
     )
 
-    # Enhance question with specific instructions
-    enhanced_question = question
-    sorting_keywords = ['top', 'highest', 'lowest', 'sort', 'rank', 'by h-index',
-                        'by h index', 'by citation']
-
-    # Critical enhancement for "these papers" or when referring to displayed papers
-    if any(phrase in question.lower() for phrase in ['these papers', 'the papers', 'for them']):
-        enhanced_question = (
-            f"{question} IMPORTANT: The user is referring to ALL {len(df_papers)} papers "
-            "currently in the dataframe. Work with the entire dataframe without filtering. "
-            "If abstracts are requested, show them for ALL papers in the dataframe."
-        )
-
-    if any(keyword in question.lower() for keyword in sorting_keywords):
-        enhanced_question += (
-            " IMPORTANT: Use the EXACT 'Max H-Index' or 'Citation Count' values from "
-            "the dataframe. Do not make up any numbers. For sorting, use pandas methods "
-            "like sort_values() or nlargest(). When listing results, show the actual "
-            "H-Index values from the 'Max H-Index' column."
-        )
-
-    # Add instruction for handling text fields with special characters
-    if any(field in question.lower() for field in ['abstract', 'title', 'venue']):
-        enhanced_question += (
-            " When displaying text fields like Abstract, Title, or Venue, handle them "
-            "carefully to avoid syntax errors. Use print() or display() functions rather "
-            "than trying to construct complex string literals."
-        )
-
-    llm_result = df_agent.invoke(enhanced_question)
+    llm_result = df_agent.invoke(question, stream_mode=None)
     return llm_result["output"]
