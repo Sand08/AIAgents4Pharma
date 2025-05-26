@@ -1,178 +1,265 @@
 """
-Unit tests for S2 display_dataframe tool functionality.
+Comprehensive unit tests for S2 display functionality including display_dataframe and DisplayHelper.
 """
 
-# pylint: disable=redefined-outer-name
+from unittest.mock import patch
 import pytest
+import pandas as pd
 from langgraph.types import Command
-from ..tools.s2.display_dataframe import (
+from langchain_core.messages import ToolMessage
+from aiagents4pharma.talk2scholars.tools.s2.display_dataframe import (
     display_dataframe,
     NoPapersFoundError,
 )
+from aiagents4pharma.talk2scholars.tools.s2.utils.display_helper import DisplayHelper
 
 
-@pytest.fixture
-def initial_state():
-    """Provides an empty initial state for tests."""
-    return {"papers": {}, "multi_papers": {}}
-
-
-# Fixed test data for deterministic results
-MOCK_STATE_PAPERS = {
-    "123": {
-        "Title": "Machine Learning Basics",
-        "Abstract": "An introduction to ML",
+# --- Test Data ---
+MOCK_PAPERS_DICT = {
+    "paper1": {
+        "semantic_scholar_paper_id": "paper1",
+        "Title": "Deep Learning Fundamentals",
+        "Abstract": "A comprehensive guide to deep learning",
         "Year": 2023,
-        "Citation Count": 100,
+        "Citation Count": 150,
         "Max H-Index": 45,
+        "Authors": ["Author A", "Author B"],
         "URL": "https://example.com/paper1",
-        "Authors": ["Test Author 1"],
     },
-    "456": {
-        "Title": "Deep Learning Advanced",
-        "Abstract": "Advanced DL techniques",
-        "Year": 2024,
-        "Citation Count": 200,
-        "Max H-Index": 80,
-        "URL": "https://example.com/paper2",
-        "Authors": ["Test Author 2"],
-    },
-    "789": {
-        "Title": "Neural Networks",
-        "Abstract": "NN fundamentals",
+    "paper2": {
+        "semantic_scholar_paper_id": "paper2",
+        "Title": "Advanced Machine Learning",
+        "Abstract": "Advanced techniques in ML",
         "Year": 2022,
-        "Citation Count": 50,
-        "Max H-Index": "N/A",
-        "URL": "https://example.com/paper3",
-        "Authors": ["Test Author 3"],
+        "Citation Count": 200,
+        "Max H-Index": 60,
+        "Authors": ["Author C", "Author D"],
+        "URL": "https://example.com/paper2",
     },
-    "101": {
-        "Title": "AI Ethics",
-        "Abstract": "Ethical AI considerations",
+    "paper3": {
+        "semantic_scholar_paper_id": "paper3",
+        "Title": "Neural Networks",
+        "Abstract": "Introduction to neural networks",
         "Year": 2024,
         "Citation Count": "N/A",
         "Max H-Index": 30,
-        "URL": "https://example.com/paper4",
-        "Authors": ["Test Author 4"],
-    }
+        "Authors": ["Author E"],
+        "URL": "https://example.com/paper3",
+    },
+}
+
+MOCK_PAPERS_WITH_NA = {
+    "paper1": {
+        "Title": "Paper with NA values",
+        "Year": "N/A",
+        "Citation Count": "N/A",
+        "Max H-Index": None,
+        "Authors": ["Author X"],
+    },
+    "paper2": {
+        "Title": "Paper with values",
+        "Year": 2023,
+        "Citation Count": 100,
+        "Max H-Index": 50,
+        "Authors": ["Author Y"],
+    },
 }
 
 
-class TestDisplayDataframe:
+# --- DisplayHelper Tests ---
+class TestDisplayHelper:
+    """Unit tests for DisplayHelper class"""
+
+    def test_init_with_papers(self):
+        """Test DisplayHelper initialization with papers dictionary"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        assert helper.papers_dict == MOCK_PAPERS_DICT
+        assert helper.df is None
+
+    def test_prepare_dataframe_no_sorting(self):
+        """Test prepare_dataframe without sorting"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        df = helper.prepare_dataframe()
+
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) == 3
+        assert "Title" in df.columns
+        assert "Citation Count" in df.columns
+
+    def test_prepare_dataframe_sort_by_citation_count(self):
+        """Test sorting by Citation Count (descending)"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        df = helper.prepare_dataframe(sort_by="Citation Count", ascending=False)
+
+        # paper2 should be first (200), paper1 second (150), paper3 last (N/A)
+        assert df.index[0] == "paper2"
+        assert df.index[1] == "paper1"
+        assert df.index[2] == "paper3"
+
+    def test_prepare_dataframe_sort_by_year_ascending(self):
+        """Test sorting by Year (ascending)"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        df = helper.prepare_dataframe(sort_by="Year", ascending=True)
+
+        # paper2 (2022) should be first, paper1 (2023) second, paper3 (2024) last
+        assert df.index[0] == "paper2"
+        assert df.index[1] == "paper1"
+        assert df.index[2] == "paper3"
+
+    def test_prepare_dataframe_with_limit(self):
+        """Test limiting results"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        df = helper.prepare_dataframe(sort_by="Max H-Index", ascending=False, limit=2)
+
+        assert len(df) == 2
+        # paper2 (60) and paper1 (45) should be included
+        assert "paper2" in df.index
+        assert "paper1" in df.index
+        assert "paper3" not in df.index
+
+    def test_prepare_dataframe_handle_na_values(self):
+        """Test handling of N/A values in numeric columns"""
+        helper = DisplayHelper(MOCK_PAPERS_WITH_NA)
+        df = helper.prepare_dataframe(sort_by="Citation Count", ascending=False)
+
+        # paper2 with value 100 should be first, paper1 with N/A should be last
+        assert df.index[0] == "paper2"
+        assert df.index[1] == "paper1"
+        # Check that N/A was converted to NaN
+        assert pd.isna(df.loc["paper1", "Citation Count"])
+
+    def test_get_sorted_dict_no_dataframe(self):
+        """Test get_sorted_dict when no dataframe exists"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        sorted_dict = helper.get_sorted_dict()
+
+        assert sorted_dict == MOCK_PAPERS_DICT
+
+    def test_get_sorted_dict_with_sorting(self):
+        """Test get_sorted_dict after sorting"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        helper.prepare_dataframe(sort_by="Citation Count", ascending=False)
+        sorted_dict = helper.get_sorted_dict()
+
+        # Check order is maintained
+        keys = list(sorted_dict.keys())
+        assert keys[0] == "paper2"  # 200 citations
+        assert keys[1] == "paper1"  # 150 citations
+        assert keys[2] == "paper3"  # N/A citations
+
+    def test_format_summary_no_sorting(self):
+        """Test format_summary without sorting"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        helper.prepare_dataframe()
+        summary = helper.format_summary()
+
+        assert "3 papers found." in summary
+        assert "Papers are attached as an artifact." in summary
+        assert "Sorted by" not in summary
+
+    def test_format_summary_with_sorting(self):
+        """Test format_summary with sorting"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        helper.prepare_dataframe(sort_by="Year", ascending=True)
+        summary = helper.format_summary(sort_by="Year")
+
+        assert "3 papers found." in summary
+        assert "Sorted by Year" in summary
+        assert "ascending" in summary
+
+    def test_format_summary_with_limit(self):
+        """Test format_summary with limit"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        helper.prepare_dataframe(sort_by="Citation Count", limit=2)
+        summary = helper.format_summary(sort_by="Citation Count", limit=2)
+
+        assert "2 papers found." in summary
+        assert "Showing top 2 results." in summary
+
+    def test_sort_by_title(self):
+        """Test sorting by Title (alphabetical)"""
+        helper = DisplayHelper(MOCK_PAPERS_DICT)
+        df = helper.prepare_dataframe(sort_by="Title", ascending=True)
+
+        # Advanced ML < Deep Learning < Neural Networks
+        assert df.index[0] == "paper2"
+        assert df.index[1] == "paper1"
+        assert df.index[2] == "paper3"
+
+
+# --- display_dataframe Tool Tests ---
+class TestDisplayDataframeTool:
     """Unit tests for display_dataframe tool"""
 
-    def test_display_dataframe_empty_state(self, initial_state):
-        """Verifies display_dataframe raises error when state is empty"""
-        with pytest.raises(
-            NoPapersFoundError,
-            match="No papers found. A search/rec needs to be performed first.",
-        ):
-            display_dataframe.invoke(
-                {"state": initial_state, "tool_call_id": "test123"}
-            )
-
-    def test_display_dataframe_no_last_displayed_papers(self, initial_state):
-        """Verifies error when last_displayed_papers key is missing"""
-        state = initial_state.copy()
-        state["papers"] = MOCK_STATE_PAPERS
-        # Don't set last_displayed_papers
+    def test_display_dataframe_no_papers_in_state(self):
+        """Test display_dataframe raises error when no papers in state"""
+        state = {"last_displayed_papers": None}
 
         with pytest.raises(
             NoPapersFoundError,
-            match="No papers found. A search/rec needs to be performed first.",
+            match="No papers found. A search/rec needs to be performed first."
         ):
-            display_dataframe.invoke(
-                {"state": state, "tool_call_id": "test123"}
-            )
+            display_dataframe.invoke({
+                "state": state,
+                "tool_call_id": "test123"
+            })
 
-    def test_display_dataframe_default_no_sorting(self, initial_state):
-        """Verifies default behavior without sorting"""
-        state = initial_state.copy()
-        state["last_displayed_papers"] = "papers"
-        state["papers"] = MOCK_STATE_PAPERS
-
-        result = display_dataframe.invoke(
-            {"state": state, "tool_call_id": "test123"}
-        )
-
-        assert isinstance(result, Command)
-        assert isinstance(result.update, dict)
-        assert "messages" in result.update
-        assert len(result.update["messages"]) == 1
-
-        message = result.update["messages"][0]
-        assert "4 papers found. Papers are attached as an artifact." in message.content
-        assert message.artifact == MOCK_STATE_PAPERS  # Original order preserved
-
-        # Verify state is updated
-        assert "last_displayed_papers" in result.update
-        assert result.update["last_displayed_papers"] == MOCK_STATE_PAPERS
-
-    def test_display_dataframe_direct_mapping(self, initial_state):
-        """Verifies handling of direct dict mapping in last_displayed_papers"""
-        state = initial_state.copy()
-        state["last_displayed_papers"] = MOCK_STATE_PAPERS
-
-        result = display_dataframe.invoke(
-            {"state": state, "tool_call_id": "test123"}
-        )
-
-        assert isinstance(result, Command)
-        messages = result.update.get("messages", [])
-        assert len(messages) == 1
-        assert messages[0].artifact == MOCK_STATE_PAPERS
-        assert "4 papers found" in messages[0].content
-
-    def test_display_dataframe_sort_by_h_index(self, initial_state):
-        """Verifies sorting by Max H-Index in descending order"""
-        state = initial_state.copy()
-        state["last_displayed_papers"] = MOCK_STATE_PAPERS
+    def test_display_dataframe_basic_success(self):
+        """Test basic display without sorting"""
+        state = {
+            "last_displayed_papers": "papers",
+            "papers": MOCK_PAPERS_DICT
+        }
 
         result = display_dataframe.invoke({
             "state": state,
-            "tool_call_id": "test123",
-            "sort_by": "Max H-Index",
-            "ascending": False
+            "tool_call_id": "test123"
         })
 
         assert isinstance(result, Command)
-        message = result.update["messages"][0]
+        update = result.update
+        assert "messages" in update
+        assert "last_displayed_papers" in update
 
-        # Check content mentions sorting
-        assert "Sorted by Max H-Index (descending)" in message.content
+        messages = update["messages"]
+        assert len(messages) == 1
+        msg = messages[0]
+        assert isinstance(msg, ToolMessage)
+        assert "3 papers found." in msg.content
+        assert msg.artifact == MOCK_PAPERS_DICT
 
-        # Verify sorting order (80, 45, 30, N/A)
-        artifact_keys = list(message.artifact.keys())
-        assert artifact_keys == ["456", "123", "101", "789"]
-
-        # Verify state is updated with sorted papers
-        assert result.update["last_displayed_papers"] == message.artifact
-
-    def test_display_dataframe_sort_by_citation_count(self, initial_state):
-        """Verifies sorting by Citation Count"""
-        state = initial_state.copy()
-        state["last_displayed_papers"] = MOCK_STATE_PAPERS
+    def test_display_dataframe_with_sorting(self):
+        """Test display with sorting"""
+        state = {
+            "last_displayed_papers": MOCK_PAPERS_DICT
+        }
 
         result = display_dataframe.invoke({
             "state": state,
             "tool_call_id": "test123",
             "sort_by": "Citation Count",
-            "ascending": True  # Test ascending order
+            "ascending": False
         })
 
-        message = result.update["messages"][0]
+        assert isinstance(result, Command)
+        update = result.update
 
-        # Check content
-        assert "Sorted by Citation Count" in message.content
+        # Check artifact is sorted
+        artifact = update["messages"][0].artifact
+        keys = list(artifact.keys())
+        assert keys[0] == "paper2"  # 200 citations
+        assert keys[1] == "paper1"  # 150 citations
 
-        # Verify sorting order (50, 100, 200, N/A)
-        artifact_keys = list(message.artifact.keys())
-        assert artifact_keys == ["789", "123", "456", "101"]
+        # Check message contains sorting info
+        content = update["messages"][0].content
+        assert "Sorted by Citation Count" in content
+        assert "descending" in content
 
-    def test_display_dataframe_sort_with_limit(self, initial_state):
-        """Verifies sorting with limit parameter"""
-        state = initial_state.copy()
-        state["last_displayed_papers"] = MOCK_STATE_PAPERS
+    def test_display_dataframe_with_limit(self):
+        """Test display with limit"""
+        state = {
+            "last_displayed_papers": MOCK_PAPERS_DICT
+        }
 
         result = display_dataframe.invoke({
             "state": state,
@@ -182,89 +269,81 @@ class TestDisplayDataframe:
             "limit": 2
         })
 
-        message = result.update["messages"][0]
+        update = result.update
+        artifact = update["messages"][0].artifact
 
-        # Check content mentions limit
-        assert "Showing top 2 results" in message.content
+        # Should only have 2 papers
+        assert len(artifact) == 2
+        assert "paper2" in artifact  # H-Index 60
+        assert "paper1" in artifact  # H-Index 45
+        assert "paper3" not in artifact  # H-Index 30
 
-        # Verify only 2 papers returned
-        assert len(message.artifact) == 2
-        artifact_keys = list(message.artifact.keys())
-        assert artifact_keys == ["456", "123"]  # Top 2 by H-index
+        # Check message mentions limit
+        content = update["messages"][0].content
+        assert "Showing top 2 results" in content
 
-    def test_display_dataframe_sort_by_year(self, initial_state):
-        """Verifies sorting by Year"""
-        state = initial_state.copy()
-        state["last_displayed_papers"] = MOCK_STATE_PAPERS
+    def test_display_dataframe_direct_dict_mapping(self):
+        """Test when last_displayed_papers is direct dict instead of key"""
+        state = {
+            "last_displayed_papers": MOCK_PAPERS_DICT
+        }
+
+        result = display_dataframe.invoke({
+            "state": state,
+            "tool_call_id": "test123"
+        })
+
+        assert isinstance(result, Command)
+        assert result.update["messages"][0].artifact == MOCK_PAPERS_DICT
+
+    def test_display_dataframe_updates_state(self):
+        """Test that display_dataframe updates state with sorted/filtered results"""
+        state = {
+            "last_displayed_papers": MOCK_PAPERS_DICT
+        }
 
         result = display_dataframe.invoke({
             "state": state,
             "tool_call_id": "test123",
             "sort_by": "Year",
-            "ascending": False
+            "limit": 1
         })
 
-        message = result.update["messages"][0]
+        update = result.update
+        # State should be updated with the filtered result
+        assert "last_displayed_papers" in update
+        updated_papers = update["last_displayed_papers"]
+        assert len(updated_papers) == 1
 
-        # Verify sorting order (2024, 2024, 2023, 2022)
-        artifact_keys = list(message.artifact.keys())
-        # Note: When years are equal, original order is preserved
-        assert artifact_keys[0] in ["456", "101"]  # Both are 2024
-        assert artifact_keys[1] in ["456", "101"]  # Both are 2024
-        assert artifact_keys[2] == "123"  # 2023
-        assert artifact_keys[3] == "789"  # 2022
-
-    def test_display_dataframe_invalid_sort_column(self, initial_state):
-        """Verifies behavior with invalid sort column"""
-        state = initial_state.copy()
-        state["last_displayed_papers"] = MOCK_STATE_PAPERS
-
-        result = display_dataframe.invoke({
-            "state": state,
-            "tool_call_id": "test123",
-            "sort_by": "Invalid Column",
-            "ascending": False
-        })
-
-        # Should return original order when column doesn't exist
-        message = result.update["messages"][0]
-        assert message.artifact == MOCK_STATE_PAPERS
-
-    def test_display_dataframe_empty_papers_dict(self, initial_state):
-        """Verifies handling of empty papers dictionary"""
-        state = initial_state.copy()
-        state["last_displayed_papers"] = {}
+    def test_display_dataframe_empty_papers_dict(self):
+        """Test handling of empty papers dictionary"""
+        state = {
+            "last_displayed_papers": {}
+        }
 
         with pytest.raises(
             NoPapersFoundError,
-            match="No papers found. A search/rec needs to be performed first.",
+            match="No papers found. A search/rec needs to be performed first."
         ):
-            display_dataframe.invoke(
-                {"state": state, "tool_call_id": "test123"}
-            )
+            display_dataframe.invoke({
+                "state": state,
+                "tool_call_id": "test123"
+            })
 
-    def test_display_dataframe_all_parameters(self, initial_state):
-        """Verifies tool with all parameters specified"""
-        state = initial_state.copy()
-        state["last_displayed_papers"] = MOCK_STATE_PAPERS
+    @patch("aiagents4pharma.talk2scholars.tools.s2.display_dataframe.logger")
+    def test_display_dataframe_logging(self, mock_logger):
+        """Test that appropriate logging occurs"""
+        state = {
+            "last_displayed_papers": MOCK_PAPERS_DICT
+        }
 
-        # Test with all parameters
-        result = display_dataframe.invoke({
+        display_dataframe.invoke({
             "state": state,
-            "tool_call_id": "test_all_params",
-            "sort_by": "Citation Count",
-            "ascending": False,
-            "limit": 3
+            "tool_call_id": "test123",
+            "sort_by": "Year"
         })
 
-        assert isinstance(result, Command)
-        message = result.update["messages"][0]
-
-        # Verify all aspects
-        assert "Sorted by Citation Count (descending)" in message.content
-        assert "Showing top 3 results" in message.content
-        assert len(message.artifact) == 3
-
-        # Verify correct papers and order (200, 100, 50)
-        artifact_keys = list(message.artifact.keys())
-        assert artifact_keys == ["456", "123", "789"]
+        # Check logging calls
+        mock_logger.info.assert_any_call(
+            "Displaying papers with sort_by=%s, limit=%s", "Year", None
+        )
