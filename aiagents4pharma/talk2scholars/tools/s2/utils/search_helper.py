@@ -143,6 +143,7 @@ class SearchData:
                     f"{author.get('name', 'N/A')} (ID: {author.get('authorId', 'N/A')})"
                     for author in paper.get("authors", [])
                 ],
+                "Max H-Index": self._get_max_h_index(paper.get("authors", [])),
                 "URL": paper.get("url", "N/A"),
                 "arxiv_id": arxiv or "N/A",
                 "pmc_id": pmc or "N/A",
@@ -155,6 +156,16 @@ class SearchData:
         self.filtered_papers = filtered
 
         logger.info("Filtered %d papers", len(self.filtered_papers))
+
+    def _get_max_h_index(self, authors):
+        """Helper method to calculate maximum H-index from authors list."""
+        h_indices = []
+        for author in authors:
+            h_index = author.get("hIndex", "")
+            if str(h_index).isdigit():
+                h_indices.append(int(h_index))
+
+        return max(h_indices) if h_indices else "N/A"
 
     def _get_snippet(self, abstract: str) -> str:
         """Extract the first one or two sentences from an abstract."""

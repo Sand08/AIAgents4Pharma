@@ -3,5 +3,6 @@
 from . import search_helper
 from . import single_helper
 from . import multi_helper
+from . import display_helper
 
-__all__ = ["search_helper", "single_helper", "multi_helper"]
+__all__ = ["search_helper", "single_helper", "multi_helper", "display_helper"]

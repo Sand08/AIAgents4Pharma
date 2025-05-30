@@ -93,7 +93,10 @@ def dummy_requests_get_success(url, params, timeout):
             {
                 "paperId": "paper1",
                 "title": "Recommended Paper 1",
-                "authors": [{"name": "Author A", "authorId": "A1"}],
+                "authors": [
+                    {"name": "Author A", "authorId": "A1", "hIndex": "25"},
+                    {"name": "Author B", "authorId": "B1", "hIndex": "30"}
+                ],
                 "year": 2020,
                 "citationCount": 15,
                 "url": "http://paper1",
@@ -102,7 +105,10 @@ def dummy_requests_get_success(url, params, timeout):
             {
                 "paperId": "paper2",
                 "title": "Recommended Paper 2",
-                "authors": [{"name": "Author B", "authorId": "B1"}],
+                "authors": [
+                    {"name": "Author C", "authorId": "C1", "hIndex": "invalid"},  # Invalid h-index
+                    {"name": "Author D", "authorId": "D1"}  # No h-index
+                ],
                 "year": 2021,
                 "citationCount": 25,
                 "url": "http://paper2",
@@ -120,7 +126,6 @@ def dummy_requests_get_success(url, params, timeout):
         ]
     }
     return DummyResponse(dummy_data)
-
 
 def dummy_requests_get_unexpected(url, params, timeout):
     """
@@ -212,6 +217,8 @@ def test_single_paper_rec_success(monkeypatch):
     assert called_params["from"] == "default_pool"
     # The year parameter should be present.
     assert called_params["year"] == "2020"
+    assert papers["paper1"]["Max H-Index"] == 30  # Max of 25 and 30
+    assert papers["paper2"]["Max H-Index"] == "N/A"  # No valid h-indices
 
 
 def test_single_paper_rec_unexpected_format(monkeypatch):

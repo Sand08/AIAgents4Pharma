@@ -86,7 +86,10 @@ def dummy_requests_get_success(url, params, timeout):
             {
                 "paperId": "1",
                 "title": "Paper 1",
-                "authors": [{"name": "Author A", "authorId": "A1"}],
+                "authors": [
+                    {"name": "Author A", "authorId": "A1", "hIndex": "40"},
+                    {"name": "Author B", "authorId": "B1", "hIndex": "35"}
+                ],
                 "year": 2020,
                 "citationCount": 10,
                 "url": "http://paper1",
@@ -95,7 +98,10 @@ def dummy_requests_get_success(url, params, timeout):
             {
                 "paperId": "2",
                 "title": "Paper 2",
-                "authors": [{"name": "Author B", "authorId": "B1"}],
+                "authors": [
+                    {"name": "Author C", "authorId": "C1", "hIndex": "20"},
+                    {"name": "Author D", "authorId": "D1", "hIndex": "not_a_number"}
+                ],
                 "year": 2021,
                 "citationCount": 20,
                 "url": "http://paper2",
@@ -113,7 +119,6 @@ def dummy_requests_get_success(url, params, timeout):
         ]
     }
     return DummyResponse(dummy_data)
-
 
 def dummy_requests_get_no_data(url, params, timeout):
     """A dummy requests.get function that returns a response without the expected 'data' key."""
@@ -203,7 +208,10 @@ def test_search_tool_success(monkeypatch):
     assert called_params["limit"] == 3
     # The fields should be a comma-separated string from the dummy config.
     assert called_params["fields"] == "paperId,title,authors"
-
+    # Add these assertions after checking papers are included
+    # Check that Max H-Index was properly calculated
+    assert papers["1"]["Max H-Index"] == 40  # Max of 40 and 35
+    assert papers["2"]["Max H-Index"] == 20  # Only one valid h-index
 
 def test_search_tool_unexpected_format(monkeypatch):
     """
