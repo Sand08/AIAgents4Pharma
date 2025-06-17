@@ -38,7 +38,7 @@ def retrieve_relevant_chunks(
         List of document chunks
     """
     if not self.vector_store:
-        logger.error("Failed to build vector store")
+        logger.error("Failed to build vector store %s",self.vector_store)
         return []
 
     if paper_ids:

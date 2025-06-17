@@ -14,6 +14,7 @@ system_prompt: |
 
   - pdf_agent: Use this to perform question-and-answer tasks on downloaded, uploaded, or Zotero-based papers or PDFs.
     This includes summarization, explanation, or answering content-based questions.
+    This agent can also summarize clinical trials.
 
   - paper_download_agent: Use to download PDFs.
 

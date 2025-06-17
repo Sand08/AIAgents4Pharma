@@ -1,0 +1,169 @@
+"""
+LangGraph PDF Retrieval-Augmented Generation (RAG) Tool
+
+This tool answers user questions by retrieving and ranking relevant text chunks from PDFs
+and invoking an LLM to generate a concise, source-attributed response. It supports
+single or multiple PDF sources—such as Zotero libraries, arXiv papers, or direct uploads.
+
+Workflow:
+  1. (Optional) Load PDFs from diverse sources into a FAISS vector store of embeddings.
+  2. Rerank candidate papers using NVIDIA NIM semantic re-ranker.
+  3. Retrieve top-K diverse text chunks via Maximal Marginal Relevance (MMR).
+  4. Build a context-rich prompt combining retrieved chunks and the user question.
+  5. Invoke the LLM to craft a clear answer with source citations.
+  6. Return the answer in a ToolMessage for LangGraph to dispatch.
+"""
+
+import logging
+import os
+import time
+from typing import Annotated, Dict, Any
+
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import tool
+from langchain_core.tools.base import InjectedToolCallId
+from langgraph.prebuilt import InjectedState
+from langgraph.types import Command
+from pydantic import BaseModel, Field
+
+from .utils.generate_answer import load_hydra_config
+from .utils.retrieve_chunks import retrieve_relevant_chunks
+from .utils.tool_helper import QAToolHelper
+
+from .utils.vector_store import Vectorstore
+
+# Helper for managing state, vectorstore, reranking, and formatting
+helper = QAToolHelper()
+# Load configuration and start logging
+config = load_hydra_config()
+
+# Set up logging with configurable level
+log_level = os.environ.get("LOG_LEVEL", "INFO")
+logging.basicConfig(level=getattr(logging, log_level))
+logger = logging.getLogger(__name__)
+logger.setLevel(getattr(logging, log_level))
+
+
+class ClinicalTrialInput(BaseModel):
+    """
+    Pydantic schema for the clinical trial tool input.
+
+    Fields:
+      tool_call_id: LangGraph-injected call identifier for tracking.
+      state: Shared agent state dict containing:
+        - article_data: metadata mapping of paper IDs to info (e.g., 'pdf_url', title).
+        - text_embedding_model: embedding model instance for chunk indexing.
+        - llm_model: chat/LLM instance for answer generation.
+        - vector_store: optional pre-built Vectorstore for retrieval.
+    """
+
+    tool_call_id: Annotated[str, InjectedToolCallId]
+    state: Annotated[dict, InjectedState]
+
+
+@tool(args_schema=ClinicalTrialInput, parse_docstring=True)
+def trial_summarization(
+    state: Annotated[dict, InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command[Any]:
+    """
+    LangGraph tool for Retrieval-Augmented Generation over Clinical Trial PDFs.
+
+    Given a user question, this tool applies the following pipeline:
+      1. Validates that embedding and LLM models, plus article metadata, are in state.
+      2. Initializes or reuses a FAISS-based Vectorstore for PDF embeddings.
+      3. Loads one or more PDFs (from Zotero, arXiv, uploads) as text chunks into the store.
+      4. Retrieves the most relevant and diverse text chunks via Maximal Marginal Relevance.
+      5. Constructs an LLM prompt combining contextual chunks and the query.
+      6. Invokes the LLM to generate an answer, appending source attributions.
+      7. Returns a LangGraph Command with a ToolMessage containing the answer.
+
+    Args:
+      state (dict): Injected agent state; must include:
+        - article_data: mapping paper IDs → metadata (pdf_url, title, etc.)
+        - text_embedding_model: embedding model instance.
+        - llm_model: chat/LLM instance.
+      tool_call_id (str): Internal identifier for this tool invocation.
+
+    Returns:
+      Command[Any]: updates conversation state with a ToolMessage(answer).
+
+    Raises:
+      ValueError: when required models or metadata are missing in state.
+      RuntimeError: when no relevant chunks can be retrieved for the query.
+    """
+    call_id = f"ct_call_{time.time()}"
+    logger.info(
+        "Starting Clinical Trial tool call %s",
+        call_id,
+    )
+    helper.start_call(config, call_id)
+
+    # Extract models and article metadata
+    text_emb, llm_model, article_data = helper.get_state_models_and_data(state)
+    # clinical trial data variable
+    clinical_data: Dict[str, Any] = {}
+    clinical_data["RMDSVIR"] = {
+        "Title": "A Phase 3 Randomized, Double-Blind Placebo-Controlled Trial to Evaluate the Efficacy and Safety of Remdesivir (GS-5734™) Treatment of COVID-19 in an Outpatient Setting",
+        "Sponsor": "Gilead Sciences, Inc",
+        "Objective": """The purpose of this trial is to evaluate treatment with intravenous
+                    (IV) administered remdesivir (RDV, GS-5734) in an outpatient
+                    setting in participants with confirmed coronavirus disease 2019
+                    (COVID-19) who are at risk for disease progression.
+                    The primary objectives of this study are as follows:
+                     To evaluate the efficacy of RDV in reducing the rate of
+                    COVID-19 related hospitalization or all-cause death in
+                    non-hospitalized participants with early stage COVID-19
+                     To evaluate the safety of RDV administered in an outpatient
+                    setting
+                    The secondary objectives of this study are as follows:
+                     To evaluate the efficacy of RDV in reducing the rate of
+                    COVID-19 related medically attended visits (MAVs; medical
+                    visits attended in person by the participant and a health care
+                    professional) or all-cause death in non-hospitalized participants
+                    with early stage COVID-19
+                     To determine the antiviral activity of RDV on severe acute
+                    respiratory syndrome (SARS)-coronavirus (CoV)-2 viral load
+                     To assess the impact of RDV on symptom duration and severity""",
+        "Publication Date": "14 January 2021",
+        "URL": "https://cdn.clinicaltrials.gov/large-docs/52/NCT04501952/Prot_000.pdf",
+        "pdf_url": "https://cdn.clinicaltrials.gov/large-docs/52/NCT04501952/Prot_000.pdf",
+        "filename": "RMDSVIR.pdf",
+        "source": "clinical_trial",
+        "cl_id": "RMDSVIR",
+    }
+    # Initialize or reuse vector store, then load candidate papers
+    vs = helper.init_vector_store(text_emb)
+    candidate_ids = list(clinical_data.keys())
+    print(f"Candidate paper IDs: {candidate_ids}")
+    logger.info("%s: Candidate paper IDs for reranking: %s", call_id, candidate_ids)
+    helper.load_candidate_papers(vs, clinical_data, candidate_ids)
+    #building a vector store
+    vs.build_vector_store()
+    question = "What are the Patient demographics and sample sizes in the article?"
+    # Rerank papers and retrieve top chunks
+    selected_ids = helper.run_reranker(vs, question, candidate_ids)
+    
+    relevant_chunks = retrieve_relevant_chunks(
+        vs, query=question, paper_ids=selected_ids, top_k=config.top_k_chunks
+    )
+    if not relevant_chunks:
+        msg = f"No relevant chunks found for question: '{question}'"
+        logger.warning("%s: %s", call_id, msg)
+        raise RuntimeError(msg)
+
+    # Generate answer and format with sources
+    response_text = helper.format_answer(
+        question, relevant_chunks, llm_model, clinical_data
+    )
+    print(f"Response text: {response_text}")
+    return Command(
+        update={
+            "messages": [
+                ToolMessage(
+                    content=response_text,
+                    tool_call_id=tool_call_id,
+                )
+            ],
+        }
+    )

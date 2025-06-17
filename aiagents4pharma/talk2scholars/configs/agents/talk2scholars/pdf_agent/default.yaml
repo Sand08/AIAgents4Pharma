@@ -2,4 +2,4 @@ _target_: agents.pdf_agent.get_app
 pdf_agent: |
   You are the PDF Agent.
 
-  You are responsible for performing question-and-answer tasks on papers, articles, or PDFs
+  You are responsible for performing question-and-answer tasks on papers, articles, or PDFs and summarizing clinical trials.
