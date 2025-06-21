@@ -46,24 +46,25 @@ class DisplayDataframeInput(BaseModel):
         description=(
             "Column to sort by. Options: 'Max H-Index', 'Citation Count', "
             "'Year', 'Title', 'Authors'. If not specified, papers are "
-            "displayed in original order."
+            "displayed in original order. This parameter should ONLY be set "
+            "when the user explicitly requests sorting."
         )
     )
     ascending: bool = Field(
         default=False,
         description=(
             "Sort order. False for descending (highest first), "
-            "True for ascending."
+            "True for ascending. Only used when sort_by is specified."
         )
     )
     limit: Optional[int] = Field(
         default=None,
         description=(
             "Number of top results to display after sorting. "
-            "If not specified, all papers are shown."
+            "If not specified, all papers are shown. Only used when sort_by is specified."
         ),
         ge=1,
-        le=10
+        le=100  # Increased from 10 to allow more flexibility
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
     state: Annotated[dict, InjectedState]
@@ -86,16 +87,18 @@ def display_dataframe(
     DataFrame. If no papers are found in state, it raises a NoPapersFoundError
     to indicate that a search or recommendation must be performed first.
     
-    Optionally sorts the papers by bibliographic metrics before display.
+    IMPORTANT: Only sorts papers when explicitly requested. Default behavior is
+    to display papers in their original order without any sorting.
 
     Args:
         tool_call_id (InjectedToolCallId): Unique ID of this tool invocation.
         state (dict): The agent's state containing 'last_displayed_papers'.
-        sort_by (str, optional): Column to sort by ('Max H-Index',
-            'Citation Count', 'Year', etc.)
+        sort_by (str, optional): Column to sort by. Should ONLY be set when
+            user explicitly requests sorting.
         ascending (bool): Sort order - False for descending (default),
-            True for ascending
-        limit (int, optional): Number of top results to display after sorting
+            True for ascending. Only used when sort_by is specified.
+        limit (int, optional): Number of top results to display after sorting.
+            Only used when sort_by is specified.
 
     Returns:
         Command: A command whose update contains a ToolMessage with the
@@ -105,7 +108,11 @@ def display_dataframe(
         NoPapersFoundError: If no entries exist under 'last_displayed_papers'
             in state.
     """
-    logger.info("Displaying papers with sort_by=%s, limit=%s", sort_by, limit)
+    # Clear logging to show exact parameters received
+    logger.info(
+        "display_dataframe called with: sort_by=%s, ascending=%s, limit=%s",
+        sort_by, ascending, limit
+    )
 
     # Get papers from state
     context_val = state.get("last_displayed_papers")
@@ -118,15 +125,16 @@ def display_dataframe(
     if not papers_dict:
         logger.info("No papers found in state, raising NoPapersFoundError")
         raise NoPapersFoundError(
-            "No papers found. A search/rec needs to be performed first."
+            "No papers found. A search/recommendation needs to be performed first."
         )
 
-    # Use helper for formatting
+    # Initialize helper
     helper = DisplayHelper(papers_dict)
 
-    # Only apply sorting if sort_by is explicitly specified
-    if sort_by:
-        logger.info("Applying sorting by %s", sort_by)
+    # CRITICAL: Only apply sorting if sort_by is explicitly specified
+    # This prevents carrying over sorting from previous calls
+    if sort_by is not None and sort_by != "":
+        logger.info("Sorting explicitly requested by: %s", sort_by)
         helper.prepare_dataframe(
             sort_by=sort_by,
             ascending=ascending,
@@ -136,14 +144,23 @@ def display_dataframe(
         # Create appropriate content message with sorting info
         content = helper.format_summary(sort_by=sort_by, limit=limit)
     else:
-        # No sorting requested - return original papers
+        # No sorting requested - return original papers in their original order
         logger.info("No sorting requested, displaying papers in original order")
         artifact = papers_dict
         # Simple message without sorting info
+        displayed_count = len(papers_dict)
         content = (
-            f"{len(papers_dict)} papers found. "
+            f"{displayed_count} papers found. "
+            "Papers are displayed in their original order. "
             "Papers are attached as an artifact."
         )
+
+    # Log what we're returning for debugging
+    logger.info(
+        "Returning %d papers, sorted=%s",
+        len(artifact),
+        sort_by is not None
+    )
 
     return Command(
         update={
@@ -154,7 +171,5 @@ def display_dataframe(
                     artifact=artifact,
                 )
             ],
-            # CRITICAL: Update the state to persist the filtered/sorted view
-            "last_displayed_papers": artifact,
         }
     )
