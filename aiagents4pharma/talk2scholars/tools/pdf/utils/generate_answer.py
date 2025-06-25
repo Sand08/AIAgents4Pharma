@@ -55,6 +55,7 @@ def _build_context_and_sources(
         pid = doc.metadata.get("paper_id")
         if isinstance(pid, str):
             sources.add(pid)
+    context = context.replace("{", "").replace("}", "")
     return context, sources
 
 
@@ -90,10 +91,13 @@ def generate_answer(
     Returns:
         Dict[str, Any]: Dictionary with the answer and metadata
     """
+    print(f"Generating answer for question")
     # Ensure the configuration is provided and has the prompt_template.
     if config is None:
+        logger.info("Configuration for generate_answer is required but not provided.")
         raise ValueError("Configuration for generate_answer is required.")
     if "prompt_template" not in config:
+        logger.info("The prompt_template is missing from the configuration.")
         raise ValueError("The prompt_template is missing from the configuration.")
     
 
@@ -106,12 +110,14 @@ def generate_answer(
         ("human", "Based on the context: {context} answer this question {question}"),
     ]
 )
+    logger.info("Built prompt template with context and question.")
     messages = prompt.invoke({"context":context,"question":question})
+    logger.info("Invoking LLM with messages")
     structured_llm = llm_model.with_structured_output(CitedAnswer)
     response = structured_llm.invoke(messages)
     # print("Response content: ", response)
-    print("Answer:", response.answer)
-    print("Citations:", response.citations)
+    #print("Answer:", response.answer)
+    #print("Citations:", response.citations)
     output = f"{response.answer}    Sources: {', '.join(response.citations)}"
     print("OUTPUT",output)
     # Return the response with metadata

@@ -104,9 +104,14 @@ class QAToolHelper:
         chunks: List[Any],
         llm: Any,
         articles: Dict[str, Any],
+        config: None
     ) -> str:
         """Generate the final answer text with source attributions."""
-        result = generate_answer(question, chunks, llm, self.config)
+        #IF config is None:
+        if config is None:
+            logger.info("%s: No explicit configuration. Using class instance", self.call_id)
+            config = self.config
+        result = generate_answer(question, chunks, llm, config)
         answer = result.get("output_text", "No answer generated.")
         titles: Dict[str, str] = {}
         # for pid in result.get("papers_used", []):

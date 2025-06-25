@@ -37,6 +37,7 @@ def retrieve_relevant_chunks(
     Returns:
         List of document chunks
     """
+    print(f"Retrieving chunks top k: {top_k}")
     if not self.vector_store:
         logger.error("Failed to build vector store %s",self.vector_store)
         return []

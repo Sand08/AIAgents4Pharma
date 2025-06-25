@@ -18,6 +18,7 @@ import logging
 import os
 import time
 from typing import Annotated, Dict, Any
+import hydra
 
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
@@ -26,22 +27,34 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from .utils.generate_answer import load_hydra_config
 from .utils.retrieve_chunks import retrieve_relevant_chunks
 from .utils.tool_helper import QAToolHelper
 
 from .utils.vector_store import Vectorstore
-
-# Helper for managing state, vectorstore, reranking, and formatting
-helper = QAToolHelper()
-# Load configuration and start logging
-config = load_hydra_config()
 
 # Set up logging with configurable level
 log_level = os.environ.get("LOG_LEVEL", "INFO")
 logging.basicConfig(level=getattr(logging, log_level))
 logger = logging.getLogger(__name__)
 logger.setLevel(getattr(logging, log_level))
+
+def load_hydra_config() -> Any:
+    """
+    Load the configuration using Hydra and return the configuration for the Q&A tool.
+    """
+    with hydra.initialize(version_base=None, config_path="../../configs"):
+        cfg = hydra.compose(
+            config_name="config",
+            overrides=["tools/clinical_trial=default"],
+        )
+        config = cfg.tools.clinical_trial
+        logger.debug("Loaded Clinical Trial tool configuration.")
+        return config
+
+# Helper for managing state, vectorstore, reranking, and formatting
+helper = QAToolHelper()
+# Load configuration and start logging
+config = load_hydra_config()
 
 
 class ClinicalTrialInput(BaseModel):
@@ -140,22 +153,35 @@ def trial_summarization(
     helper.load_candidate_papers(vs, clinical_data, candidate_ids)
     #building a vector store
     vs.build_vector_store()
-    question = "What are the Patient demographics and sample sizes in the article?"
-    # Rerank papers and retrieve top chunks
-    selected_ids = helper.run_reranker(vs, question, candidate_ids)
-    
-    relevant_chunks = retrieve_relevant_chunks(
-        vs, query=question, paper_ids=selected_ids, top_k=config.top_k_chunks
-    )
-    if not relevant_chunks:
-        msg = f"No relevant chunks found for question: '{question}'"
-        logger.warning("%s: %s", call_id, msg)
-        raise RuntimeError(msg)
+    questions = [
+      "What are the Patient demographics and sample sizes in the article?",
+       "What were the Dosages, Dosing regimens and administration schedules?",
+       "What are the inclusion and exclusion criteria?"
+       "What are the Indications and therapeutic areas?",
+       "What are the Outcome measures (e.g., IBDQ, CDAI, CRP levels).",
+    ]
+    response_text = ""
+    for question in questions:
+        try:
+          logger.info(f"Question: {question}")
+          time.sleep(3)
+          # Rerank papers and retrieve top chunks
+          selected_ids = helper.run_reranker(vs, question, candidate_ids)
 
-    # Generate answer and format with sources
-    response_text = helper.format_answer(
-        question, relevant_chunks, llm_model, clinical_data
-    )
+          relevant_chunks = retrieve_relevant_chunks(
+              vs, query=question, paper_ids=selected_ids, top_k=config.top_k_chunks
+          )
+          if not relevant_chunks:
+              msg = f"No relevant chunks found for question: '{question}'"
+              logger.warning("%s: %s", call_id, msg)
+              raise RuntimeError(msg)
+
+          # Generate answer and format with sources
+          response_text = response_text + helper.format_answer(
+              question, relevant_chunks, llm_model, clinical_data,config=config
+          )
+        except Exception as e:
+            print(f"Error processing question: {question} - {e}")
     print(f"Response text: {response_text}")
     return Command(
         update={
