@@ -11,7 +11,7 @@ Workflow:
   3. Retrieve top-K diverse text chunks via Maximal Marginal Relevance (MMR).
   4. Build a context-rich prompt combining retrieved chunks and the user question.
   5. Invoke the LLM to craft a clear answer with source citations.
-  6. Return the answer in a ToolMessage for LangGraph to dispatch.
+  6. Return the answer in a ToolMessage and citations as artifact for LangGraph to dispatch.
 """
 
 import logging
@@ -89,7 +89,7 @@ def trial_summarization(
       4. Retrieves the most relevant and diverse text chunks via Maximal Marginal Relevance.
       5. Constructs an LLM prompt combining contextual chunks and the query.
       6. Invokes the LLM to generate an answer, appending source attributions.
-      7. Returns a LangGraph Command with a ToolMessage containing the answer.
+      7. Returns a LangGraph Command with ToolMessage containing the answer and citations as artifact.
 
     Args:
       state (dict): Injected agent state; must include:
@@ -99,7 +99,7 @@ def trial_summarization(
       tool_call_id (str): Internal identifier for this tool invocation.
 
     Returns:
-      Command[Any]: updates conversation state with a ToolMessage(answer).
+      Command[Any]: updates conversation state with a ToolMessage(answer) and citations as artifact.
 
     Raises:
       ValueError: when required models or metadata are missing in state.
@@ -145,6 +145,24 @@ def trial_summarization(
         "source": "clinical_trial",
         "cl_id": "RMDSVIR",
     }
+    clinical_data["RMDSVIR2"]= {
+        "Title": "Remdesivir for the Treatment of Covid-19 — Final Report",
+        "Sponsor": "J.H. Beigel, K.M. Tomashek, L.E. Dodd",
+        "Objective": """We conducted a double-blind, randomized, placebo-controlled trial of 
+        intravenous remdesivir in adults who were hospitalized with Covid-19 and had 
+        evidence of lower respiratory tract infection. Patients were randomly assigned 
+        to receive either remdesivir (200 mg loading dose on day 1, followed by 100 mg 
+        daily for up to 9 additional days) or placebo for up to 10 days. The primary 
+        outcome was the time to recovery, defined by either discharge from the hospital 
+        or hospitalization for infection-control purposes only.""",
+        "Publication Date": "8 June 2019",
+        "URL": "https://europepmc.org/articles/PMC8406992?pdf=render",
+        "pdf_url": "https://europepmc.org/articles/PMC8406992?pdf=render",
+        "filename": "RMDSVIR2.pdf",
+        "source": "clinical_trial",
+        "cl_id": "RMDSVIR2",
+    }
+
     # Initialize or reuse vector store, then load candidate papers
     vs = helper.init_vector_store(text_emb)
     candidate_ids = list(clinical_data.keys())
@@ -161,6 +179,7 @@ def trial_summarization(
        "What are the Outcome measures (e.g., IBDQ, CDAI, CRP levels).",
     ]
     response_text = ""
+    sources = set()
     for question in questions:
         try:
           logger.info(f"Question: {question}")
@@ -177,17 +196,28 @@ def trial_summarization(
               raise RuntimeError(msg)
 
           # Generate answer and format with sources
-          response_text = response_text + helper.format_answer(
+          response_fa = helper.format_answer(
               question, relevant_chunks, llm_model, clinical_data,config=config
           )
+          response_text += response_fa['answer']
+          for cits in response_fa['citations']:
+              sources.add(cits)
         except Exception as e:
             print(f"Error processing question: {question} - {e}")
     print(f"Response text: {response_text}")
+
+    content = f"{response_text}. Citations to be displayed are sent as an artifact."
+    srcs = "\nSources:\n\n"
+    for s in sources:
+        srcs += f"{s}\n"
+    print(f"Sources: {srcs}")
+    logger.info("Sending back generated response and citations as an artifact")
     return Command(
         update={
             "messages": [
                 ToolMessage(
-                    content=response_text,
+                    content=content,
+                    artifact=srcs,
                     tool_call_id=tool_call_id,
                 )
             ],

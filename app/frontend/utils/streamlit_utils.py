@@ -748,6 +748,24 @@ def get_response(agent, graphs_visuals, app, st, prompt):
             )
             st.empty()
 
+        elif msg.name in ["trial_summarization"]:
+            print("artifact:", msg.artifact)
+            sources = msg.artifact
+
+            if not sources:
+                continue
+
+            st.write(sources)
+
+            st.session_state.messages.append(
+                {
+                    "type": "trial_summarization",
+                    "content": sources,
+                    "key": "trial_summarization_" + uniq_msg_id,
+                    "tool_name": msg.name,
+                }
+            )
+
 
 def render_graph(graph_dict: dict, key: str, save_graph: bool = False):
     """

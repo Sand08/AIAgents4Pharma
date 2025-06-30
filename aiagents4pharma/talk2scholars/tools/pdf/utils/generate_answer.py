@@ -20,7 +20,7 @@ logger.setLevel(getattr(logging, log_level))
 
 class CitedAnswer(BaseModel):
     """Answer the user question based only on the given sources, and cite the sources used."""
-
+ 
     answer: str = Field(
         ...,
         description="The answer to the user question, which is based only on the given sources.",
@@ -55,9 +55,8 @@ def _build_context_and_sources(
         pid = doc.metadata.get("paper_id")
         if isinstance(pid, str):
             sources.add(pid)
-    context = context.replace("{", "").replace("}", "")
+    context = context.replace("{","").replace("}","")
     return context, sources
-
 
 def load_hydra_config() -> Any:
     """
@@ -71,7 +70,6 @@ def load_hydra_config() -> Any:
         config = cfg.tools.question_and_answer
         logger.debug("Loaded Question and Answer tool configuration.")
         return config
-
 
 def generate_answer(
     question: str,
@@ -91,38 +89,37 @@ def generate_answer(
     Returns:
         Dict[str, Any]: Dictionary with the answer and metadata
     """
-    print(f"Generating answer for question")
     # Ensure the configuration is provided and has the prompt_template.
     if config is None:
-        logger.info("Configuration for generate_answer is required but not provided.")
         raise ValueError("Configuration for generate_answer is required.")
     if "prompt_template" not in config:
-        logger.info("The prompt_template is missing from the configuration.")
         raise ValueError("The prompt_template is missing from the configuration.")
-    
-
     # Build context and sources, then invoke LLM
     context, paper_sources = _build_context_and_sources(retrieved_chunks)
-    # prompt = config["prompt_template"].format(context=context, question=question)
     prompt = ChatPromptTemplate.from_messages(
     [
         ("system", config['prompt_template'].format(context=context)),
         ("human", "Based on the context: {context} answer this question {question}"),
     ]
 )
-    logger.info("Built prompt template with context and question.")
-    messages = prompt.invoke({"context":context,"question":question})
-    logger.info("Invoking LLM with messages")
-    structured_llm = llm_model.with_structured_output(CitedAnswer)
-    response = structured_llm.invoke(messages)
-    # print("Response content: ", response)
-    #print("Answer:", response.answer)
-    #print("Citations:", response.citations)
-    output = f"{response.answer}    Sources: {', '.join(response.citations)}"
-    print("OUTPUT",output)
+    try:
+        messages = prompt.invoke({"context": context, "question": question})
+        structured_llm = llm_model.with_structured_output(CitedAnswer)
+        try:
+            response = structured_llm.invoke(messages)
+        except Exception as exc:
+            raise RuntimeError("Error encountered during structured output") from exc
+ 
+    except Exception as exc:
+        raise RuntimeError("Error encountered during LLM RAG invocation") from exc
+    output = f"{response.answer}"
+    citations = response.citations
+    logger.info("Answer and citations generated successfully")
+    print("citations:", citations)
     # Return the response with metadata
     return {
         "output_text": output,
+        "citations": citations,
         "sources": [doc.metadata for doc in retrieved_chunks],
         "num_sources": len(retrieved_chunks),
         "papers_used": list(paper_sources),
