@@ -115,8 +115,8 @@ def trial_summarization(
     # Extract models and article metadata
     text_emb, llm_model, article_data = helper.get_state_models_and_data(state)
     # clinical trial data variable
-    clinical_data: Dict[str, Any] = {}
-    clinical_data["RMDSVIR"] = {
+    #clinical_data: Dict[str, Any] = {}
+    article_data["RMDSVIR"] = {
         "Title": "A Phase 3 Randomized, Double-Blind Placebo-Controlled Trial to Evaluate the Efficacy and Safety of Remdesivir (GS-5734™) Treatment of COVID-19 in an Outpatient Setting",
         "Sponsor": "Gilead Sciences, Inc",
         "Objective": """The purpose of this trial is to evaluate treatment with intravenous
@@ -145,7 +145,7 @@ def trial_summarization(
         "source": "clinical_trial",
         "cl_id": "RMDSVIR",
     }
-    clinical_data["RMDSVIR2"]= {
+    article_data["RMDSVIR2"]= {
         "Title": "Remdesivir for the Treatment of Covid-19 — Final Report",
         "Sponsor": "J.H. Beigel, K.M. Tomashek, L.E. Dodd",
         "Objective": """We conducted a double-blind, randomized, placebo-controlled trial of 
@@ -165,10 +165,10 @@ def trial_summarization(
 
     # Initialize or reuse vector store, then load candidate papers
     vs = helper.init_vector_store(text_emb)
-    candidate_ids = list(clinical_data.keys())
+    candidate_ids = list(article_data.keys())
     print(f"Candidate paper IDs: {candidate_ids}")
     logger.info("%s: Candidate paper IDs for reranking: %s", call_id, candidate_ids)
-    helper.load_candidate_papers(vs, clinical_data, candidate_ids)
+    helper.load_candidate_papers(vs, article_data, candidate_ids)
     #building a vector store
     vs.build_vector_store()
     questions = [
@@ -197,7 +197,7 @@ def trial_summarization(
 
           # Generate answer and format with sources
           response_fa = helper.format_answer(
-              question, relevant_chunks, llm_model, clinical_data,config=config
+              question, relevant_chunks, llm_model, article_data,config=config
           )
           response_text += response_fa['answer']
           for cits in response_fa['citations']:
