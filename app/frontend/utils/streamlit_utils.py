@@ -766,6 +766,24 @@ def get_response(agent, graphs_visuals, app, st, prompt):
                 }
             )
 
+        elif msg.name in ["question_and_answer"]:
+            print("artifact:", msg.artifact)
+            sources = msg.artifact
+
+            if not sources:
+                continue
+
+            st.write(sources)
+
+            st.session_state.messages.append(
+                {
+                    "type": "question_and_answer",
+                    "content": sources,
+                    "key": "question_and_answer_" + uniq_msg_id,
+                    "tool_name": msg.name,
+                }
+            )
+
 
 def render_graph(graph_dict: dict, key: str, save_graph: bool = False):
     """

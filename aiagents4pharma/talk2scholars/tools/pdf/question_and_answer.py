@@ -123,16 +123,24 @@ def question_and_answer(
         msg = f"No relevant chunks found for question: '{question}'"
         logger.warning("%s: %s", call_id, msg)
         raise RuntimeError(msg)
-
+    try:
     # Generate answer and format with sources
-    response_text = helper.format_answer(
-        question, relevant_chunks, llm_model, article_data
-    )
+      response_text = helper.format_answer(
+          question, relevant_chunks, llm_model, article_data,config=None
+      )
+    except Exception as e:
+        logger.error("%s: Error generating answer: %s", call_id, str(e))
+        raise RuntimeError(f"Failed to generate answer: {str(e)}")
+    print (f"Generated answer: {response_text['answer'], response_text['citations']}")
+
+    artifact = "\n".join(f"{title}" for title in response_text["citations"])
+    content = f"{response_text['answer']}. Citations to be displayed are sent as an artifact."
     return Command(
         update={
             "messages": [
                 ToolMessage(
-                    content=response_text,
+                    content=content,
+                    artifact=artifact,
                     tool_call_id=tool_call_id,
                 )
             ],
