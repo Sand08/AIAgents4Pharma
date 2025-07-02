@@ -110,11 +110,13 @@ class QAToolHelper:
         answer = result.get("output_text", "No answer generated.")
         citations = result.get("citations", [])
         titles: Dict[str, str] = {}
+        idx = 1
         for pid in citations:
             if pid in articles:
-                titles[pid] = articles[pid].get("Title", "Unknown paper")
+                titles[idx] = articles[pid].get("Title", "Unknown paper")
+                idx+=1
         if titles:
-            srcs = "\n\nSources:\n" + "\n".join(f"- {t}" for t in titles.values())
+            srcs = "\n\nSources:\n" + "\n".join(f"- [{idx}]: {t}" for idx,t in titles.items())
         else:
             srcs = ""
         logger.info(
@@ -124,6 +126,8 @@ class QAToolHelper:
             len(titles),
             len(citations)
         )
+        print("Answer: ", answer)
+        print("Sources: ",srcs)
         return {
             "answer": answer,
             "citations": srcs
