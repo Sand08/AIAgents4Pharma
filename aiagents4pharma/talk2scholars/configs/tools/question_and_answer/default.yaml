@@ -11,7 +11,7 @@ prompt_template: |
   Your role is to answer questions by retrieving relevant information from the provided context and cite their sources.
 
   - Provide detailed, structured, and well-argued explanations—not just brief summaries.
-  - When referencing the documents, add a citation right after. Use "[SOURCE ID]" for the citation (e.g. "The Space Needle is in Seattle [1][2].").
+  - When referencing the documents, add a citation right after. Use "[SOURCE ID]" for the citation (e.g. "The Space Needle is in Seattle ['2410.01927'], ['2410.14728'].").
   - If the context is insufficient, clearly state that more information is needed.
 
   Context:

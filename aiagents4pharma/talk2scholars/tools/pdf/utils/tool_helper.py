@@ -109,6 +109,7 @@ class QAToolHelper:
         result = generate_answer(question, chunks, llm, self.config)
         answer = result.get("output_text", "No answer generated.")
         citations = result.get("citations", [])
+        print ("These are citation:",citations)
         titles: Dict[str, str] = {}
         idx = 1
         for pid in citations:
